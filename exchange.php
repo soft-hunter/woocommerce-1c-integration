@@ -122,19 +122,10 @@ function wc1c_set_output_callback()
   ob_start('wc1c_output_callback');
 }
 
-function wc1c_strict_error_handler($errno, $errstr, $errfile, $errline, $errcontext)
-{
+function wc1c_strict_error_handler($errno, $errstr, $errfile = '', $errline = 0, $errcontext = null) {
   if (error_reporting() === 0) return false;
 
   switch ($errno) {
-    // case E_NOTICE:
-    // case E_USER_NOTICE:
-    //   $type = "Notice";
-    //   break;
-    // case E_WARNING:
-    // case E_USER_WARNING:
-    //   $type = "Warning";
-    //   break;
     case E_ERROR:
     case E_USER_ERROR:
       $type = "Fatal Error";
@@ -622,7 +613,7 @@ function wc1c_exchange()
 
   // Only enable debug in development - security risk in production
   if (defined('WP_DEBUG') && WP_DEBUG) {
-    define('WC1C_DEBUG', true);
+    // define('WC1C_DEBUG', true); // Remove this line
   }
 
   // Validate filename parameter when required

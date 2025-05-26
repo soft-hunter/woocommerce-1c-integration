@@ -43,7 +43,7 @@ A robust WordPress plugin that provides seamless data exchange between WooCommer
 
 ```bash
 # Clone the repository
-git clone https://github.com/igormelnykit/woocommerce-1c.git
+git clone https://github.com/soft-hunter/woocommerce-1c-integration.git
 
 # Copy to WordPress plugins directory
 cp -r woocommerce-1c /path/to/wordpress/wp-content/plugins/
@@ -270,7 +270,7 @@ msgfmt -o woocommerce-1c-uk.mo woocommerce-1c-uk.po
 
 ```bash
 # Clone repository
-git clone https://github.com/igormelnykit/woocommerce-1c.git
+git clone https://github.com/soft-hunter/woocommerce-1c-integration.git
 cd woocommerce-1c
 
 # Install development dependencies
@@ -335,7 +335,7 @@ This project is licensed under the **GNU General Public License v3.0** - see the
 
 **Igor Melnyk**
 - Email: [igormelnykit@gmail.com](mailto:igormelnykit@gmail.com)
-- GitHub: [@igormelnykit](https://github.com/igormelnykit)
+- GitHub: [@soft-hunter](https://github.com/soft-hunter)
 
 ## 🙏 Acknowledgments
 
