@@ -1,0 +1,33 @@
+# WordPress
+wp-config.php
+wp-content/uploads/
+wp-content/cache/
+wp-content/backup-db/
+wp-content/advanced-cache.php
+wp-content/wp-cache-config.php
+
+# Plugin specific
+*.log
+*.tmp
+/uploads/
+/cache/
+
+# Development
+node_modules/
+vendor/
+.env
+.DS_Store
+Thumbs.db
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# Composer
+composer.lock
+
+# NPM
+package-lock.json
+yarn.lock
