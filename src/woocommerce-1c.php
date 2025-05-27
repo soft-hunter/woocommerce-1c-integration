@@ -22,7 +22,7 @@ if (!defined('ABSPATH')) exit;
 
 // Prevent direct access
 if (!function_exists('add_action')) {
-    echo 'Hi there!  I\'m just a plugin, not much I can do when called directly.';
+    echo 'Hi there! I\'m just a plugin, not much I can do when called directly.';
     exit;
 }
 
@@ -43,7 +43,7 @@ define('WC1C_MIN_WC_VERSION', '5.0');
 $upload_dir = wp_upload_dir();
 define('WC1C_DATA_DIR', "{$upload_dir['basedir']}/woocommerce_uploads/1c-exchange/");
 
-// Configuration constants with secure defaults - only define if not already defined
+// Configuration constants with secure defaults
 if (!defined('WC1C_SUPPRESS_NOTICES')) define('WC1C_SUPPRESS_NOTICES', true);
 if (!defined('WC1C_FILE_LIMIT')) define('WC1C_FILE_LIMIT', '100M');
 if (!defined('WC1C_XML_CHARSET')) define('WC1C_XML_CHARSET', 'UTF-8');
@@ -550,7 +550,7 @@ function wc1c_admin_page()
                         <td><?php echo PHP_VERSION; ?></td>
                     </tr>
                     <tr>
-                         <td><?php _e('Memory Limit', 'woocommerce-1c-integration'); ?></td>
+                        <td><?php _e('Memory Limit', 'woocommerce-1c-integration'); ?></td>
                         <td><?php echo ini_get('memory_limit'); ?></td>
                     </tr>
                     <tr>
@@ -890,15 +890,187 @@ function wc1c_update_last_exchange()
 }
 
 /**
- * Load required files
+ * Get plugin info
  */
-require_once WC1C_PLUGIN_DIR . "admin.php";
-require_once WC1C_PLUGIN_DIR . "exchange.php";
+function wc1c_get_plugin_info()
+{
+    return array(
+        'version' => WC1C_VERSION,
+        'data_dir' => WC1C_DATA_DIR,
+        'logging_enabled' => WC1C_ENABLE_LOGGING,
+        'php_version' => PHP_VERSION,
+        'wp_version' => get_bloginfo('version'),
+        'wc_version' => defined('WC_VERSION') ? WC_VERSION : 'Not installed',
+        'memory_limit' => ini_get('memory_limit'),
+        'max_execution_time' => ini_get('max_execution_time'),
+        'post_max_size' => ini_get('post_max_size'),
+        'upload_max_filesize' => ini_get('upload_max_filesize'),
+    );
+}
 
 /**
- * Plugin loaded hook
+ * Rate limiting functionality
  */
-do_action('wc1c_loaded');
+function wc1c_check_rate_limit($ip = null)
+{
+    if (!WC1C_RATE_LIMIT) return true;
+
+    $ip = $ip ?: ($_SERVER['REMOTE_ADDR'] ?? 'unknown');
+    $cache_key = "wc1c_rate_limit_$ip";
+    $requests = wp_cache_get($cache_key);
+
+    if ($requests === false) {
+        wp_cache_set($cache_key, 1, '', 3600); // 1 hour
+        return true;
+    }
+
+    if ($requests >= WC1C_RATE_LIMIT) {
+        wc1c_log("Rate limit exceeded for IP: $ip", 'SECURITY');
+        return false;
+    }
+
+    wp_cache_set($cache_key, $requests + 1, '', 3600);
+    return true;
+}
+
+/**
+ * Security headers
+ */
+function wc1c_add_security_headers()
+{
+    if (!is_admin() && get_query_var('wc1c')) {
+        header('X-Content-Type-Options: nosniff');
+        header('X-Frame-Options: DENY');
+        header('X-XSS-Protection: 1; mode=block');
+        header('Referrer-Policy: strict-origin-when-cross-origin');
+    }
+}
+add_action('send_headers', 'wc1c_add_security_headers');
+
+/**
+ * Handle plugin updates
+ */
+function wc1c_handle_plugin_update()
+{
+    $current_version = get_option('wc1c_version', '0.0.0');
+
+    if (version_compare($current_version, WC1C_VERSION, '<')) {
+        wc1c_upgrade($current_version);
+        update_option('wc1c_version', WC1C_VERSION);
+        wc1c_log("Plugin updated from $current_version to " . WC1C_VERSION, 'INFO');
+    }
+}
+add_action('admin_init', 'wc1c_handle_plugin_update');
+
+/**
+ * REST API endpoints
+ */
+function wc1c_register_rest_routes()
+{
+    register_rest_route('wc1c/v1', '/status', array(
+        'methods' => 'GET',
+        'callback' => 'wc1c_rest_get_status',
+        'permission_callback' => function () {
+            return current_user_can('manage_woocommerce');
+        }
+    ));
+
+    register_rest_route('wc1c/v1', '/logs', array(
+        'methods' => 'GET',
+        'callback' => 'wc1c_rest_get_logs',
+        'permission_callback' => function () {
+            return current_user_can('manage_woocommerce');
+        }
+    ));
+}
+add_action('rest_api_init', 'wc1c_register_rest_routes');
+
+/**
+ * REST API: Get plugin status
+ */
+function wc1c_rest_get_status($request)
+{
+    return rest_ensure_response(wc1c_get_plugin_info());
+}
+
+/**
+ * REST API: Get logs
+ */
+function wc1c_rest_get_logs($request)
+{
+    $date = $request->get_param('date') ?: date('Y-m-d');
+    $log_file = WC1C_DATA_DIR . "logs/wc1c-$date.log";
+
+    if (!file_exists($log_file)) {
+        return new WP_Error('no_logs', 'No logs found for this date', array('status' => 404));
+    }
+
+    $content = file_get_contents($log_file);
+    return rest_ensure_response(array(
+        'date' => $date,
+        'content' => $content,
+        'size' => filesize($log_file)
+    ));
+}
+
+/**
+ * WP-CLI commands
+ */
+if (defined('WP_CLI') && WP_CLI) {
+    // WP-CLI commands would be loaded here if the class exists
+    $cli_file = WC1C_PLUGIN_DIR . 'includes/class-wc1c-cli.php';
+    if (file_exists($cli_file)) {
+        require_once $cli_file;
+    }
+}
+
+/**
+ * Add custom capabilities
+ */
+function wc1c_add_capabilities()
+{
+    $role = get_role('shop_manager');
+    if ($role) {
+        $role->add_cap('manage_wc1c');
+    }
+
+    $role = get_role('administrator');
+    if ($role) {
+        $role->add_cap('manage_wc1c');
+    }
+}
+add_action('admin_init', 'wc1c_add_capabilities');
+
+/**
+ * Remove custom capabilities on deactivation
+ */
+function wc1c_remove_capabilities()
+{
+    $roles = array('shop_manager', 'administrator');
+    foreach ($roles as $role_name) {
+        $role = get_role($role_name);
+        if ($role) {
+            $role->remove_cap('manage_wc1c');
+        }
+    }
+}
+
+/**
+ * Performance monitoring
+ */
+function wc1c_monitor_performance()
+{
+    if (!wc1c_is_debug()) return;
+
+    $memory_usage = memory_get_usage(true);
+    $memory_peak = memory_get_peak_usage(true);
+    $execution_time = microtime(true) - $_SERVER['REQUEST_TIME_FLOAT'];
+
+    wc1c_log("Performance: Memory: " . size_format($memory_usage) .
+        " Peak: " . size_format($memory_peak) .
+        " Time: " . round($execution_time, 3) . "s", 'DEBUG');
+}
+add_action('shutdown', 'wc1c_monitor_performance');
 
 /**
  * Debug function for development
@@ -925,25 +1097,107 @@ function wc1c_is_debug()
 }
 
 /**
- * Get plugin info
+ * Uninstall cleanup (only when plugin is deleted)
  */
-function wc1c_get_plugin_info()
+function wc1c_uninstall()
 {
-    return array(
-        'version' => WC1C_VERSION,
-        'data_dir' => WC1C_DATA_DIR,
-        'logging_enabled' => WC1C_ENABLE_LOGGING,
-        'php_version' => PHP_VERSION,
-        'wp_version' => get_bloginfo('version'),
-        'wc_version' => defined('WC_VERSION') ? WC_VERSION : 'Not installed',
-        'memory_limit' => ini_get('memory_limit'),
-        'max_execution_time' => ini_get('max_execution_time'),
-        'post_max_size' => ini_get('post_max_size'),
-        'upload_max_filesize' => ini_get('upload_max_filesize'),
+    // This function is called from uninstall.php
+    global $wpdb;
+
+    // Remove database indexes
+    $index_table_names = array(
+        $wpdb->postmeta,
+        $wpdb->termmeta,
+        $wpdb->usermeta,
     );
+
+    foreach ($index_table_names as $index_table_name) {
+        $index_name = 'wc1c_meta_key_meta_value';
+        $result = $wpdb->get_var($wpdb->prepare(
+            "SHOW INDEX FROM `%s` WHERE Key_name = %s",
+            $index_table_name,
+            $index_name
+        ));
+
+        if ($result) {
+            $wpdb->query($wpdb->prepare(
+                "DROP INDEX `%s` ON `%s`",
+                $index_name,
+                $index_table_name
+            ));
+        }
+    }
+
+    // Remove plugin options
+    $options = array(
+        'wc1c_activated',
+        'wc1c_version',
+        'wc1c_last_exchange',
+        'wc1c_guid_attributes',
+        'wc1c_timestamp_attributes',
+        'wc1c_order_attributes',
+        'wc1c_currency'
+    );
+
+    foreach ($options as $option) {
+        delete_option($option);
+    }
+
+    // Clear scheduled events
+    wp_clear_scheduled_hook('wc1c_cleanup_logs');
+
+    // Optionally remove data directory (uncomment if desired)
+    // wc1c_remove_data_directory();
 }
 
-// Initialize the plugin
+/**
+ * Remove data directory and all contents
+ */
+function wc1c_remove_data_directory()
+{
+    if (!is_dir(WC1C_DATA_DIR)) return;
+
+    $iterator = new RecursiveIteratorIterator(
+        new RecursiveDirectoryIterator(WC1C_DATA_DIR, FilesystemIterator::SKIP_DOTS),
+        RecursiveIteratorIterator::CHILD_FIRST
+    );
+
+    foreach ($iterator as $path => $item) {
+        $item->isDir() ? rmdir($path) : unlink($path);
+    }
+
+    rmdir(WC1C_DATA_DIR);
+}
+
+/**
+ * Load required files
+ */
+require_once WC1C_PLUGIN_DIR . "admin.php";
+require_once WC1C_PLUGIN_DIR . "exchange.php";
+
+// Load exchange handlers if they exist
+$exchange_dir = WC1C_PLUGIN_DIR . 'exchange/';
+if (is_dir($exchange_dir)) {
+    $exchange_files = array('import.php', 'offers.php', 'orders.php', 'query.php', 'success.php');
+
+    foreach ($exchange_files as $file) {
+        $file_path = $exchange_dir . $file;
+        if (file_exists($file_path)) {
+            require_once $file_path;
+        }
+    }
+}
+
+/**
+ * Plugin loaded hook
+ */
+do_action('wc1c_loaded');
+
+/**
+ * Initialize the plugin
+ */
 if (did_action('plugins_loaded')) {
     wc1c_init();
+} else {
+    add_action('plugins_loaded', 'wc1c_init');
 }
