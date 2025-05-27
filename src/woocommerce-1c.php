@@ -1,6 +1,6 @@
 <?php
 /*
-Plugin Name: WooCommerce and 1C:Enterprise Data Exchange (Enhanced)
+Plugin Name: WooCommerce 1C Integration
 Version: 1.0.0
 Description: Enhanced data exchange between WooCommerce and 1C:Enterprise.
 Author: Igor Melnyk
@@ -43,7 +43,7 @@ define('WC1C_MIN_WC_VERSION', '5.0');
 $upload_dir = wp_upload_dir();
 define('WC1C_DATA_DIR', "{$upload_dir['basedir']}/woocommerce_uploads/1c-exchange/");
 
-// Configuration constants with secure defaults
+// Configuration constants with secure defaults - only define if not already defined
 if (!defined('WC1C_SUPPRESS_NOTICES')) define('WC1C_SUPPRESS_NOTICES', true);
 if (!defined('WC1C_FILE_LIMIT')) define('WC1C_FILE_LIMIT', '100M');
 if (!defined('WC1C_XML_CHARSET')) define('WC1C_XML_CHARSET', 'UTF-8');
@@ -550,7 +550,7 @@ function wc1c_admin_page()
                         <td><?php echo PHP_VERSION; ?></td>
                     </tr>
                     <tr>
-                        <td><?php _e('Memory Limit', 'woocommerce-1c-integration'); ?></td>
+                         <td><?php _e('Memory Limit', 'woocommerce-1c-integration'); ?></td>
                         <td><?php echo ini_get('memory_limit'); ?></td>
                     </tr>
                     <tr>
@@ -647,12 +647,12 @@ function wc1c_plugin_row_meta($plugin_meta, $plugin_file)
     $plugin_meta_after = array(
         'docs' => sprintf(
             '<a href="%s" target="_blank">%s</a>',
-            'https://github.com/enhanced-wc1c/woocommerce-1c/wiki',
+            'https://github.com/soft-hunter/woocommerce-1c-integration/wiki',
             __('Documentation', 'woocommerce-1c-integration')
         ),
         'support' => sprintf(
             '<a href="%s" target="_blank">%s</a>',
-            'https://github.com/enhanced-wc1c/woocommerce-1c/issues',
+            'https://github.com/soft-hunter/woocommerce-1c-integration/issues',
             __('Support', 'woocommerce-1c-integration')
         ),
     );
@@ -899,79 +899,6 @@ require_once WC1C_PLUGIN_DIR . "exchange.php";
  * Plugin loaded hook
  */
 do_action('wc1c_loaded');
-
-/**
- * Uninstall cleanup (only when plugin is deleted)
- */
-function wc1c_uninstall()
-{
-    // This function is called from uninstall.php
-    global $wpdb;
-
-    // Remove database indexes
-    $index_table_names = array(
-        $wpdb->postmeta,
-        $wpdb->termmeta,
-        $wpdb->usermeta,
-    );
-
-    foreach ($index_table_names as $index_table_name) {
-        $index_name = 'wc1c_meta_key_meta_value';
-        $result = $wpdb->get_var($wpdb->prepare(
-            "SHOW INDEX FROM `%s` WHERE Key_name = %s",
-            $index_table_name,
-            $index_name
-        ));
-
-        if ($result) {
-            $wpdb->query($wpdb->prepare(
-                "DROP INDEX `%s` ON `%s`",
-                $index_name,
-                $index_table_name
-            ));
-        }
-    }
-
-    // Remove plugin options
-    $options = array(
-        'wc1c_activated',
-        'wc1c_version',
-        'wc1c_last_exchange',
-        'wc1c_guid_attributes',
-        'wc1c_timestamp_attributes',
-        'wc1c_order_attributes',
-        'wc1c_currency'
-    );
-
-    foreach ($options as $option) {
-        delete_option($option);
-    }
-
-    // Clear scheduled events
-    wp_clear_scheduled_hook('wc1c_cleanup_logs');
-
-    // Optionally remove data directory (uncomment if desired)
-    // wc1c_remove_data_directory();
-}
-
-/**
- * Remove data directory and all contents
- */
-function wc1c_remove_data_directory()
-{
-    if (!is_dir(WC1C_DATA_DIR)) return;
-
-    $iterator = new RecursiveIteratorIterator(
-        new RecursiveDirectoryIterator(WC1C_DATA_DIR, FilesystemIterator::SKIP_DOTS),
-        RecursiveIteratorIterator::CHILD_FIRST
-    );
-
-    foreach ($iterator as $path => $item) {
-        $item->isDir() ? rmdir($path) : unlink($path);
-    }
-
-    rmdir(WC1C_DATA_DIR);
-}
 
 /**
  * Debug function for development

@@ -1,33 +1,32 @@
-# WordPress
-wp-config.php
-wp-content/uploads/
-wp-content/cache/
-wp-content/backup-db/
-wp-content/advanced-cache.php
-wp-content/wp-cache-config.php
+# Build artifacts
+dist/
+build/
+temp/
 
-# Plugin specific
+# Logs
 *.log
-*.tmp
-/uploads/
-/cache/
+logs/
 
-# Development
-node_modules/
-vendor/
-.env
+# OS files
 .DS_Store
 Thumbs.db
-
-# IDE
-.vscode/
-.idea/
 *.swp
 *.swo
+*~
 
-# Composer
-composer.lock
+# IDE files
+.vscode/
+.idea/
+*.sublime-*
 
-# NPM
-package-lock.json
-yarn.lock
+# Dependencies
+node_modules/
+vendor/
+
+# Environment
+.env
+.env.local
+
+# WordPress specific
+wp-config.php
+wp-content/uploads/

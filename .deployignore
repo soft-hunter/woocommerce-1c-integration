@@ -1,0 +1,28 @@
+# Development files
+.git/
+.gitignore
+scripts/
+tests/
+docs/
+node_modules/
+*.log
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/
+
+# Build artifacts
+dist/
+build/
+temp/
+
+# OS files
+*.swp
+*.swo
+*~
+
+# Development configs
+.env
+.env.local
+composer.lock
+package-lock.json

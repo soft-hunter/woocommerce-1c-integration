@@ -23,9 +23,6 @@ add_filter('query_vars', 'wc1c_query_vars');
 
 add_action('init', 'wc1c_add_rewrite_rules', 1000);
 
-function wc1c_is_debug() {
-  return defined('WP_DEBUG') && WP_DEBUG && defined('WC1C_DEBUG') && WC1C_DEBUG;
-}
 
 function wc1c_wpdb_end($is_commit = false, $no_check = false) {
   global $wpdb, $wc1c_is_transaction;
@@ -834,33 +831,6 @@ function wc1c_check_memory_usage() {
     if (function_exists('wc1c_log')) {
       wc1c_log("High memory usage detected. Current: " . size_format($memory_usage) . " Peak: " . size_format($memory_peak) . " Limit: " . $memory_limit, 'WARNING');
     }
-  }
-}
-
-// Enhanced logging function
-function wc1c_log($message, $level = 'INFO', $context = array()) {
-  if (!defined('WC1C_ENABLE_LOGGING') || !WC1C_ENABLE_LOGGING) return;
-  
-  // Ensure logs directory exists
-  $logs_dir = WC1C_DATA_DIR . 'logs';
-  if (!is_dir($logs_dir)) {
-    wp_mkdir_p($logs_dir);
-  }
-  
-  $log_file = $logs_dir . '/wc1c-' . date('Y-m-d') . '.log';
-  $timestamp = date('Y-m-d H:i:s');
-  $ip = $_SERVER['REMOTE_ADDR'] ?? 'unknown';
-  $user = wp_get_current_user();
-  $username = $user->exists() ? $user->user_login : 'anonymous';
-  
-  $context_str = !empty($context) ? ' ' . json_encode($context) : '';
-  $log_entry = "[$timestamp] [$level] [IP:$ip] [User:$username] $message$context_str" . PHP_EOL;
-  
-  file_put_contents($log_file, $log_entry, FILE_APPEND | LOCK_EX);
-  
-  // Rotate logs if they get too large (>10MB)
-  if (file_exists($log_file) && filesize($log_file) > 10 * 1024 * 1024) {
-    rename($log_file, $log_file . '.old');
   }
 }
 

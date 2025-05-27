@@ -128,34 +128,8 @@ function wc1c_woocommerce_attribute_deleted($attribute_id, $attribute_name, $tax
 }
 add_action('woocommerce_attribute_deleted', 'wc1c_woocommerce_attribute_deleted', 10, 3);
 
-function wc1c_plugin_row_meta($plugin_meta, $plugin_file) {
-  if ($plugin_file != WC1C_PLUGIN_BASENAME) return (array) $plugin_meta;
 
-  $plugin_data = get_plugin_data(__FILE__);
-  $plugin_meta_after = array(
-    // 'support' => sprintf('<a href="%s" title="%s">%s</a>', esc_url("{$plugin_data['PluginURI']}support"), esc_attr(__("Request For Premium Customer Support", 'woocommerce-1c-integration')), __("Premium Support", 'woocommerce-1c-integration')),
-    'donate' => sprintf('<a href="%s" title="%s" target="_blank">%s</a>', "https://money.yandex.ru/embed/donate.xml?account=410011766586472&quickpay=donate&payment-type-choice=on&default-sum=1000&targets=%D0%9F%D0%BB%D0%B0%D0%B3%D0%B8%D0%BD+%22%D0%9E%D0%B1%D0%BC%D0%B5%D0%BD+%D0%B4%D0%B0%D0%BD%D0%BD%D1%8B%D0%BC+%D0%BC%D0%B5%D0%B6%D0%B4%D1%83+WooCommerce+%D0%B8+1%D0%A1%3A%D0%9F%D1%80%D0%B5%D0%B4%D0%BF%D1%80%D0%B8%D1%8F%D1%82%D0%B8%D0%B5%D0%BC%22&target-visibility=on&project-name=&project-site=https%3A%2F%2Fwordpress.org%2Fplugins%2Fwoocommerce-and-1centerprise-data-exchange%2F&button-text=05&fio=on&mail=on&successURL=", esc_attr(__("Say thank you to plugin author", 'woocommerce-1c-integration')), __("Say thank you!", 'woocommerce-1c-integration')),
-  );
 
-  return array_merge($plugin_meta, $plugin_meta_after);
-}
-//add_filter('plugin_row_meta', 'wc1c_plugin_row_meta', 10, 2);
-
-function wc1c_plugin_action_links($actions) {
-  $actions_before = array(
-    // 'settings' => sprintf('<a href="%s" title="%s">%s</a>', admin_url("admin.php?page=woocommerce-1c"), esc_attr(__("View Settings", 'woocommerce-1c-integration')), __("Settings", 'woocommerce-1c-integration')),
-    'donate' => sprintf('<a href="%s" title="%s" target="_blank">%s</a>', "https://money.yandex.ru/embed/donate.xml?account=410011766586472&quickpay=donate&payment-type-choice=on&default-sum=1000&targets=%D0%9F%D0%BB%D0%B0%D0%B3%D0%B8%D0%BD+%22%D0%9E%D0%B1%D0%BC%D0%B5%D0%BD+%D0%B4%D0%B0%D0%BD%D0%BD%D1%8B%D0%BC+%D0%BC%D0%B5%D0%B6%D0%B4%D1%83+WooCommerce+%D0%B8+1%D0%A1%3A%D0%9F%D1%80%D0%B5%D0%B4%D0%BF%D1%80%D0%B8%D1%8F%D1%82%D0%B8%D0%B5%D0%BC%22&target-visibility=on&project-name=&project-site=https%3A%2F%2Fwordpress.org%2Fplugins%2Fwoocommerce-and-1centerprise-data-exchange%2F&button-text=05&fio=on&mail=on&successURL=", esc_attr(__("Say thank you to plugin author", 'woocommerce-1c-integration')), __("Say thank you!", 'woocommerce-1c-integration')),
-  );
-
-  return array_merge($actions_before, $actions);
-}
-add_filter('plugin_action_links_' . WC1C_PLUGIN_BASENAME, 'wc1c_plugin_action_links');
-
-function wc1c_admin_menu() {
-  add_menu_page(__("1C", 'woocommerce-1c-integration'), __("1C", 'woocommerce-1c-integration'), 'manage_woocommerce', 'woocommerce-1c-integration', 'wc1c_admin_menu_page_settings', null, 100);
-  add_submenu_page('woocommerce-1c-integration', __("Settings", 'woocommerce-1c-integration'), __("Settings", 'woocommerce-1c-integration'), 'manage_woocommerce', 'woocommerce-1c-integration');
-  add_submenu_page('woocommerce-1c-integration', __("TODO", 'woocommerce-1c-integration'), __("TODO", 'woocommerce-1c-integration'), 'manage_woocommerce', 'woocommerce-1c-todo', 'wc1c_admin_menu_page_todo');
-}
 //add_action('admin_menu', 'wc1c_admin_menu');
 
 function wc1c_admin_menu_page_settings() {
