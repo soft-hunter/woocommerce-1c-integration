@@ -1,354 +1,274 @@
-# WooCommerce and 1C:Enterprise Data Exchange
+# WooCommerce 1C Integration
 
-[![WordPress Plugin Version](https://img.shields.io/badge/WordPress-6.0%2B-blue.svg)](https://wordpress.org/)
-[![WooCommerce Version](https://img.shields.io/badge/WooCommerce-8.0%2B-purple.svg)](https://woocommerce.com/)
-[![PHP Version](https://img.shields.io/badge/PHP-7.4%2B-777BB4.svg)](https://php.net/)
-[![License](https://img.shields.io/badge/License-GPL%20v3-blue.svg)](https://www.gnu.org/licenses/gpl-3.0)
+Enhanced data exchange between WooCommerce and 1C:Enterprise with improved security, logging, and performance.
 
-A robust WordPress plugin that provides seamless data exchange between WooCommerce and 1C:Enterprise 8 business applications.
+## Features
 
-## 🚀 Features
+- **Secure Exchange**: Enhanced authentication and authorization
+- **Real-time Logging**: Comprehensive logging system with multiple levels
+- **Performance Optimized**: Efficient memory usage and caching
+- **Error Handling**: Robust error handling and recovery
+- **Transaction Safety**: Database transactions for data integrity
+- **Flexible Mapping**: Configurable data mapping between systems
+- **Admin Interface**: User-friendly administration panel
+- **System Monitoring**: Health checks and system status monitoring
 
-### 📦 Product Management
-- **Complete Product Sync**: Categories, attributes, variations, images, prices, and stock levels
-- **Smart Matching**: Match products by SKU, GUID, or title
-- **Bulk Operations**: Handle large product catalogs efficiently
-- **Image Handling**: Automatic image import and optimization
+## Requirements
 
-### 🛒 Order Synchronization
-- **Bidirectional Sync**: Orders flow seamlessly between WooCommerce and 1C
-- **Status Management**: Automatic order status updates
-- **Customer Data**: Complete customer information synchronization
-- **Payment Integration**: Payment method and status tracking
+- WordPress 5.0 or higher
+- WooCommerce 5.0 or higher
+- PHP 7.4 or higher
+- Required PHP extensions: xml, mbstring, curl, zip
 
-### 🔧 Advanced Features
-- **Memory Efficient**: Optimized for large datasets
-- **Transaction Safety**: Database rollback on errors
-- **Compressed Transfer**: ZIP file support for faster data exchange
-- **Multi-language**: Ukrainian and Russian language support
-- **Extensive Logging**: Detailed error reporting and debugging
+## Installation
 
-## 📋 Requirements
+1. Download the plugin files
+2. Upload to your WordPress plugins directory
+3. Activate the plugin through the WordPress admin
+4. Configure the plugin settings in WooCommerce → 1C Integration
 
-- **WordPress**: 6.0 or higher
-- **WooCommerce**: 8.0 or higher
-- **PHP**: 7.4 or higher
-- **MySQL**: 5.7 or higher
-- **Memory**: 512MB+ recommended
-- **Extensions**: ZIP, XML, cURL
+## Configuration
 
-## 🛠 Installation
+### Basic Settings
 
-### 1. Download and Install
-
-```bash
-# Clone the repository
-git clone https://github.com/soft-hunter/woocommerce-1c-integration.git
-
-# Copy to WordPress plugins directory
-cp -r woocommerce-1c /path/to/wordpress/wp-content/plugins/
-
-# Set proper permissions
-chmod -R 755 /path/to/wordpress/wp-content/plugins/woocommerce-1c/
-```
-
-### 2. WordPress Configuration
-
-Add these settings to your `wp-config.php`:
+Add these constants to your `wp-config.php` file:
 
 ```php
-// WooCommerce 1C Integration Settings
-define('WC1C_MANAGE_STOCK', 'yes');
-define('WC1C_OUTOFSTOCK_STATUS', 'outofstock');
-define('WC1C_PREVENT_CLEAN', false);
-define('WC1C_DISABLE_VARIATIONS', false);
-define('WC1C_XML_CHARSET', 'UTF-8');
-define('WC1C_FILE_LIMIT', '100M');
+// Basic Settings
+define('WC1C_ENABLE_LOGGING', true);
+define('WC1C_LOG_LEVEL', 'info');
+define('WC1C_MAX_EXECUTION_TIME', 300);
+define('WC1C_MEMORY_LIMIT', '512M');
 
 // Security Settings
-define('WC1C_SUPPRESS_NOTICES', true);
+define('WC1C_RATE_LIMIT', 60); // requests per hour
+define('WC1C_ENABLE_IP_WHITELIST', false);
+define('WC1C_IP_WHITELIST', '127.0.0.1,192.168.1.0/24');
+
+// Exchange Settings
+define('WC1C_FILE_LIMIT', '100M');
 define('WC1C_CLEANUP_GARBAGE', true);
-
-// Optional: Product Import Settings
-define('WC1C_PRODUCT_DESCRIPTION_TO_CONTENT', false);
-define('WC1C_UPDATE_POST_NAME', false);
-define('WC1C_MATCH_BY_SKU', false);
-define('WC1C_MATCH_CATEGORIES_BY_TITLE', false);
-define('WC1C_MATCH_PROPERTIES_BY_TITLE', false);
-define('WC1C_MATCH_PROPERTY_OPTIONS_BY_TITLE', false);
-define('WC1C_USE_GUID_AS_PROPERTY_OPTION_SLUG', true);
+define('WC1C_CACHE_ENABLED', true);
 ```
 
-### 3. Activate Plugin
+### 1C Configuration
 
-1. Go to **WordPress Admin** → **Plugins**
-2. Find **"WooCommerce and 1C:Enterprise Data Exchange"**
-3. Click **"Activate"**
+Use one of these URLs in your 1C configuration:
 
-## ⚙️ Configuration
+- `https://yoursite.com/?wc1c_endpoint=exchange`
+- `https://yoursite.com/wc1c/exchange/` (if pretty permalinks are enabled)
 
-### 1C:Enterprise Setup
+## Usage
 
-Configure your 1C application with these exchange URLs:
+### Exchange Process
 
-**Standard URL:**
-```
-http://yoursite.com/?wc1c=exchange
-```
+1. **Authentication**: 1C authenticates with WordPress credentials
+2. **Initialization**: Exchange session is initialized
+3. **File Upload**: Data files are uploaded and validated
+4. **Import**: Data is parsed and imported with validation
+5. **Query**: Orders are exported to 1C
+6. **Success**: Exchange is completed and logged
 
-**Pretty Permalinks:**
-```
-http://yoursite.com/wc1c/exchange/
-```
+### Admin Interface
 
-### Authentication
+Access the admin interface at **WooCommerce → 1C Integration**:
 
-Use WordPress user credentials with **Shop Manager** or **Administrator** role.
+- **Dashboard**: Overview of recent exchanges and system status
+- **Settings**: Configure exchange parameters
+- **Logs**: View detailed exchange logs
+- **System Status**: Check system health and requirements
+- **Tools**: Utilities for maintenance and troubleshooting
 
-### Server Requirements
+## Development
 
-#### PHP Configuration
-```ini
-post_max_size = 100M
-upload_max_filesize = 100M
-max_execution_time = 0
-memory_limit = 512M
-```
-
-#### Nginx Configuration
-```nginx
-server {
-    client_max_body_size 100m;
-    
-    location ~ \.php$ {
-        fastcgi_read_timeout 600s;
-        fastcgi_send_timeout 600s;
-    }
-}
-```
-
-#### Apache Configuration
-```apache
-# Add to .htaccess
-RewriteEngine On
-RewriteRule . - [E=HTTP_AUTHORIZATION:%{HTTP:Authorization}]
-```
-
-## 🔧 Configuration Options
-
-| Constant | Default | Description |
-|----------|---------|-------------|
-| `WC1C_MANAGE_STOCK` | `'yes'` | Enable stock management |
-| `WC1C_OUTOFSTOCK_STATUS` | `'outofstock'` | Out of stock status |
-| `WC1C_PREVENT_CLEAN` | `false` | Prevent data cleanup |
-| `WC1C_DISABLE_VARIATIONS` | `false` | Disable product variations |
-| `WC1C_XML_CHARSET` | `'UTF-8'` | XML encoding charset |
-| `WC1C_FILE_LIMIT` | `null` | File upload limit |
-| `WC1C_MATCH_BY_SKU` | `false` | Match products by SKU |
-| `WC1C_MATCH_CATEGORIES_BY_TITLE` | `false` | Match categories by title |
-| `WC1C_PRODUCT_DESCRIPTION_TO_CONTENT` | `false` | Use description as content |
-
-## 🔍 Usage
-
-### Manual Import Testing
-
-Test imports manually using these URLs (when logged in as admin):
+### Project Structure
 
 ```
-# Import products
-http://yoursite.com/?wc1c=exchange&type=catalog&mode=import&filename=import.xml
-
-# Import offers/prices
-http://yoursite.com/?wc1c=exchange&type=catalog&mode=import&filename=offers.xml
-
-# Query orders
-http://yoursite.com/?wc1c=exchange&type=sale&mode=query
+├── admin/                     # Admin interface
+├── exchange/                  # Exchange functionality
+│   ├── cache/                # Caching system
+│   ├── error/                # Error handling
+│   ├── mappers/              # Data mappers
+│   └── validators/           # Data validation
+├── includes/                 # Core classes
+├── public/                   # Public interface
+├── languages/                # Translation files
+└── assets/                   # CSS, JS, images
 ```
 
-### Data Cleanup
-
-Remove all imported data:
-
-```
-http://yoursite.com/?wc1c=clean
-```
-
-Or via WP-CLI:
-```bash
-wp eval-file wp-content/plugins/woocommerce-1c/clean.php
-```
-
-## 🐛 Troubleshooting
-
-### Common Issues
-
-#### Authentication Problems
-```bash
-# Test authentication
-curl -D - -u "username:password" "http://yoursite.com/?wc1c=exchange&type=catalog&mode=checkauth"
-```
-
-#### Memory Issues
-- Increase PHP memory limit
-- Enable PHP-FPM if using Nginx
-- Optimize database queries
-
-#### File Upload Problems
-- Check `post_max_size` and `upload_max_filesize`
-- Verify server disk space
-- Check file permissions
-
-### Debug Mode
-
-Enable debugging in `wp-config.php`:
-```php
-define('WP_DEBUG', true);
-define('WP_DEBUG_LOG', true);
-define('WC1C_DEBUG', true);
-```
-
-## 🔌 Hooks and Filters
-
-### Available Filters
-
-```php
-// Modify imported product data
-add_filter('wc1c_import_product_xml', 'custom_product_filter', 10, 2);
-
-// Modify imported group data
-add_filter('wc1c_import_group_xml', 'custom_group_filter', 10, 3);
-
-// Modify order requisites
-add_filter('wc1c_query_order_requisites', 'custom_order_requisites', 10, 2);
-
-// Preserve product fields
-add_filter('wc1c_import_preserve_product_fields', 'preserve_fields', 10, 3);
-```
-
-### Available Actions
-
-```php
-// After product import
-add_action('wc1c_post_product', 'after_product_import', 10, 4);
-
-// After offer import
-add_action('wc1c_post_offer', 'after_offer_import', 10, 3);
-
-// After full import
-add_action('wc1c_post_import', 'after_full_import', 10, 1);
-
-// After order export
-add_action('wc1c_post_orders', 'after_order_export', 10, 1);
-```
-
-## 🌍 Internationalization
-
-### Supported Languages
-- **English** (default)
-- **Russian** (`ru_RU`)
-- **Ukrainian** (`uk`)
-
-### Adding Translations
-
-1. Copy `languages/woocommerce-1c.pot`
-2. Create `.po` file for your language
-3. Compile to `.mo` using `msgfmt`:
+### Building
 
 ```bash
-msgfmt -o woocommerce-1c-uk.mo woocommerce-1c-uk.po
-```
-
-## 🤝 Contributing
-
-1. **Fork** the repository
-2. **Create** a feature branch (`git checkout -b feature/amazing-feature`)
-3. **Commit** your changes (`git commit -m 'Add amazing feature'`)
-4. **Push** to the branch (`git push origin feature/amazing-feature`)
-5. **Open** a Pull Request
-
-### Development Setup
-
-```bash
-# Clone repository
-git clone https://github.com/soft-hunter/woocommerce-1c-integration.git
-cd woocommerce-1c
-
-# Install development dependencies
-composer install --dev
+# Install dependencies
+composer install
 npm install
 
 # Run tests
-phpunit
-npm test
+composer test
+
+# Check code style
+composer cs
+
+# Build distribution
+composer build
 ```
 
-## 📊 Performance
+## API Reference
 
-### Benchmarks
-- **Products**: 10,000+ products in under 5 minutes
-- **Memory**: ~50MB for 1,000 products
-- **Database**: Optimized queries with proper indexing
+### Hooks and Filters
 
-### Optimization Tips
-- Use InnoDB storage engine
-- Enable object caching (Redis/Memcached)
-- Optimize PHP-FPM settings
-- Use SSD storage for better I/O
+#### Actions
 
-## 🔒 Security
+- `wc1c_before_exchange` - Before exchange starts
+- `wc1c_after_exchange` - After exchange completes
+- `wc1c_before_import` - Before data import
+- `wc1c_after_import` - After data import
+- `wc1c_product_imported` - After product import
+- `wc1c_order_exported` - After order export
 
-### Security Features
-- **Input Validation**: All data sanitized and validated
-- **SQL Injection Protection**: Prepared statements only
-- **XSS Prevention**: Output escaping
-- **Authentication**: WordPress user authentication
-- **File Upload Security**: Type and size validation
+#### Filters
 
-### Security Best Practices
-- Keep WordPress and plugins updated
-- Use strong passwords
-- Enable SSL/HTTPS
-- Regular security audits
-- Backup before major operations
+- `wc1c_import_product_data` - Modify product data before import
+- `wc1c_export_order_data` - Modify order data before export
+- `wc1c_validate_data` - Custom data validation
+- `wc1c_map_product_fields` - Custom field mapping
 
-## 📝 Changelog
+### Classes
 
-### Version 1.0.0 (2025-05-26)
-- **Added**: Complete rewrite for modern WordPress/WooCommerce
-- **Added**: Enhanced security features
-- **Added**: Ukrainian language support
-- **Added**: Improved error handling
-- **Fixed**: Memory optimization
-- **Fixed**: Compatibility with WooCommerce 9.8.5
+#### Core Classes
 
-### Version 0.9.20
-- **Fixed**: Deprecated function usage
-- **Added**: SKU matching capability
-- **Added**: Category title matching
-- **Improved**: Performance optimizations
+- `WC1C` - Main plugin class
+- `WC1C_Exchange` - Exchange handler
+- `WC1C_Logger` - Logging system
+- `WC1C_Auth` - Authentication
 
-## 📄 License
+#### Mapper Classes
 
-This project is licensed under the **GNU General Public License v3.0** - see the [LICENSE.txt](LICENSE.txt) file for details.
+- `WC1C_Product_Mapper` - Product data mapping
+- `WC1C_Order_Mapper` - Order data mapping
+- `WC1C_Group_Mapper` - Category mapping
+- `WC1C_Offer_Mapper` - Offer/variation mapping
 
-## 👨‍💻 Author
+## Troubleshooting
 
-**Igor Melnyk**
-- Email: [igormelnykit@gmail.com](mailto:igormelnykit@gmail.com)
-- GitHub: [@soft-hunter](https://github.com/soft-hunter)
+### Common Issues
 
-## 🙏 Acknowledgments
+1. **Authentication Failed**
+   - Check WordPress user credentials
+   - Verify user has shop_manager or administrator role
+   - Check server authentication headers
 
-- Original plugin by Igor Melnyk§
-- WordPress and WooCommerce communities
-- 1C:Enterprise development team
+2. **File Upload Failed**
+   - Check file size limits in PHP configuration
+   - Verify directory permissions
+   - Check available disk space
 
-## 📞 Support
+3. **Import Errors**
+   - Review error logs in admin interface
+   - Check XML file format
+   - Verify WooCommerce product structure
 
-- **Documentation**: [Plugin Wiki](https://github.com/igormelnykit/woocommerce-1c/wiki)
-- **Issues**: [GitHub Issues](https://github.com/igormelnykit/woocommerce-1c/issues)
-- **Discussions**: [GitHub Discussions](https://github.com/igormelnykit/woocommerce-1c/discussions)
+4. **Memory Issues**
+   - Increase PHP memory limit
+   - Enable caching
+   - Process data in smaller batches
 
----
+### Debug Mode
 
-**⭐ If this plugin helps your business, please consider starring the repository!**
+Enable debug mode by adding to `wp-config.php`:
+
+```php
+define('WC1C_DEBUG', true);
+define('WP_DEBUG', true);
+define('WP_DEBUG_LOG', true);
+```
+
+## Contributing
+
+1. Fork the repository
+2. Create a feature branch
+3. Make your changes
+4. Add tests for new functionality
+5. Ensure all tests pass
+6. Submit a pull request
+
+## License
+
+This plugin is licensed under the GPL v3 or later.
+
+## Support
+
+- [Documentation](https://github.com/soft-hunter/woocommerce-1c-integration/wiki)
+- [Issues](https://github.com/soft-hunter/woocommerce-1c-integration/issues)
+- [Discussions](https://github.com/soft-hunter/woocommerce-1c-integration/discussions)
+
+## Changelog
+
+### 1.0.0
+- Initial release
+- Enhanced security and authentication
+- Comprehensive logging system
+- Performance optimizations
+- Modern PHP architecture
+- Admin interface improvements
+```
+
+## .gitignore
+
+```gitignore:.gitignore
+# WordPress
+wp-config.php
+wp-content/uploads/
+wp-content/cache/
+wp-content/backup-db/
+wp-content/advanced-cache.php
+wp-content/wp-cache-config.php
+wp-content/blogs.dir/
+wp-content/upgrade/
+wp-content/backup-db/
+wp-content/backups/
+wp-content/blogs.dir/
+wp-content/cache/
+wp-content/upgrade/
+wp-content/uploads/wc-logs/
+
+# Plugin specific
+/vendor/
+/node_modules/
+/dist/
+*.log
+.env
+.env.local
+.env.production
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Composer
+composer.lock
+
+# NPM
+package-lock.json
+yarn.lock
+
+# Build files
+/build/
+/assets/dist/
+
+# Testing
+/tests/coverage/
+phpunit.xml
+.phpunit.result.cache
+
+# Temporary files
+*.tmp
+*.temp
+/tmp/

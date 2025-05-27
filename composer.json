@@ -1,0 +1,61 @@
+{
+    "name": "soft-hunter/woocommerce-1c-integration",
+    "description": "Enhanced data exchange between WooCommerce and 1C:Enterprise",
+    "type": "wordpress-plugin",
+    "license": "GPL-3.0-or-later",
+    "authors": [
+        {
+            "name": "Igor Melnyk",
+            "email": "igor.melnyk.it@gmail.com",
+            "homepage": "https://github.com/soft-hunter"
+        }
+    ],
+    "keywords": [
+        "wordpress",
+        "woocommerce",
+        "1c",
+        "integration",
+        "exchange",
+        "ecommerce"
+    ],
+    "homepage": "https://github.com/soft-hunter/woocommerce-1c-integration",
+    "support": {
+        "issues": "https://github.com/soft-hunter/woocommerce-1c-integration/issues",
+        "source": "https://github.com/soft-hunter/woocommerce-1c-integration"
+    },
+    "require": {
+        "php": ">=7.4",
+        "ext-xml": "*",
+        "ext-mbstring": "*",
+        "ext-curl": "*",
+        "ext-zip": "*"
+    },
+    "require-dev": {
+        "phpunit/phpunit": "^9.0",
+        "wp-coding-standards/wpcs": "^2.3",
+        "dealerdirect/phpcodesniffer-composer-installer": "^0.7",
+        "phpcompatibility/phpcompatibility-wp": "^2.1"
+    },
+    "autoload": {
+        "psr-4": {
+            "WC1C\\": "includes/"
+        }
+    },
+    "autoload-dev": {
+        "psr-4": {
+            "WC1C\\Tests\\": "tests/"
+        }
+    },
+    "scripts": {
+        "test": "phpunit",
+        "cs": "phpcs",
+        "cbf": "phpcbf",
+        "lint": "find . -name '*.php' -not -path './vendor/*' -exec php -l {} \\;",
+        "build": "bash scripts/build.sh"
+    },
+    "config": {
+        "allow-plugins": {
+            "dealerdirect/phpcodesniffer-composer-installer": true
+        }
+    }
+}

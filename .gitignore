@@ -1,32 +1,61 @@
-# Build artifacts
-dist/
-build/
-temp/
+# WordPress
+wp-config.php
+wp-content/uploads/
+wp-content/cache/
+wp-content/backup-db/
+wp-content/advanced-cache.php
+wp-content/wp-cache-config.php
+wp-content/blogs.dir/
+wp-content/upgrade/
+wp-content/backups/
+wp-content/blogs.dir/
+wp-content/cache/
+wp-content/upgrade/
+wp-content/uploads/wc-logs/
 
-# Logs
+# Plugin specific
+/vendor/
+/node_modules/
+/dist/
 *.log
-logs/
+.env
+.env.local
+.env.production
 
-# OS files
-.DS_Store
-Thumbs.db
+# IDE
+.vscode/
+.idea/
 *.swp
 *.swo
 *~
 
-# IDE files
-.vscode/
-.idea/
-*.sublime-*
+# OS
+.DS_Store
+Thumbs.db
 
-# Dependencies
-node_modules/
-vendor/
+# Composer
+composer.lock
 
-# Environment
-.env
-.env.local
+# NPM
+package-lock.json
+yarn.lock
 
-# WordPress specific
-wp-config.php
-wp-content/uploads/
+# Build files
+/build/
+/assets/dist/
+
+# Testing
+/tests/coverage/
+phpunit.xml
+.phpunit.result.cache
+
+# Temporary files
+*.tmp
+*.temp
+/tmp/
+
+# Development files
+webpack.config.js
+.babelrc
+.eslintrc
+.stylelintrc

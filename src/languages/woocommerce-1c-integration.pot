@@ -1,0 +1,61 @@
+# Copyright (C) 2025 WooCommerce 1C Integration
+# This file is distributed under the same license as the WooCommerce 1C Integration package.
+msgid ""
+msgstr ""
+"Project-Id-Version: WooCommerce 1C Integration 1.0.0\n"
+"Report-Msgid-Bugs-To: https://github.com/soft-hunter/woocommerce-1c-integration/issues\n"
+"POT-Creation-Date: 2025-05-26 00:00:00+00:00\n"
+"MIME-Version: 1.0\n"
+"Content-Type: text/plain; charset=UTF-8\n"
+"Content-Transfer-Encoding: 8bit\n"
+"PO-Revision-Date: 2025-MO-DA HO:MI+ZONE\n"
+"Last-Translator: FULL NAME <EMAIL@ADDRESS>\n"
+"Language-Team: LANGUAGE <LL@li.org>\n"
+
+#: admin/class-wc1c-admin.php:50
+msgid "1C Integration"
+msgstr ""
+
+#: admin/class-wc1c-admin.php:51
+msgid "Dashboard"
+msgstr ""
+
+#: admin/class-wc1c-admin.php:52
+msgid "Settings"
+msgstr ""
+
+#: admin/class-wc1c-admin.php:53
+msgid "Logs"
+msgstr ""
+
+#: admin/class-wc1c-admin.php:54
+msgid "System Status"
+msgstr ""
+
+#: admin/class-wc1c-admin.php:55
+msgid "Tools"
+msgstr ""
+
+#: includes/class-wc1c.php:100
+msgid "1C ID"
+msgstr ""
+
+#: includes/class-wc1c.php:101
+msgid "Last Sync"
+msgstr ""
+
+#: includes/class-wc1c.php:120
+msgid "Sync Status"
+msgstr ""
+
+#: includes/class-wc1c.php:130
+msgid "Synced"
+msgstr ""
+
+#: includes/class-wc1c.php:132
+msgid "Pending"
+msgstr ""
+
+#: includes/class-wc1c.php:134
+msgid "Not synced"
+msgstr ""

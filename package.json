@@ -1,0 +1,9 @@
+{
+  "name": "woocommerce-1c-integration",
+  "version": "1.0.0",
+  "description": "Enhanced data exchange between WooCommerce and 1C:Enterprise",
+  "main": "index.js",
+  "scripts": {
+    "build": "npm run build:css && npm run build:js",
+    "build:css": "sass src/admin/scss:src/admin/css src/public/scss:src/public/css --style compressed",
+    "build:js": "webpack --mode
