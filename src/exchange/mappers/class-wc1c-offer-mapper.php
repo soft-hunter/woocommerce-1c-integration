@@ -4,7 +4,7 @@
  *
  * @package    WooCommerce_1C_Integration
  * @subpackage WooCommerce_1C_Integration/exchange/mappers
- * @author     Igor Melnyk <igormelnykit@gmail.com>
+ * @author     Igor Melnyk <igor.melnyk.it@gmail.com>
  */
 
 // Prevent direct access

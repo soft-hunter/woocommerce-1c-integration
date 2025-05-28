@@ -1,14 +1,13 @@
 <?php
-if (!defined('ABSPATH')) {
-    exit('Direct access forbidden.');
-}
-
 /**
- * The file that defines the core plugin class
+ * The core plugin class.
+ *
+ * This is used to define internationalization, admin-specific hooks, and
+ * public-facing site hooks.
  *
  * @package    WooCommerce_1C_Integration
  * @subpackage WooCommerce_1C_Integration/includes
- * @author     Igor Melnyk <igormelnykit@gmail.com>
+ * @author     Igor Melnyk <igor.melnyk.it@gmail.com>
  */
 
 // Prevent direct access
@@ -18,12 +17,6 @@ if (!defined('ABSPATH')) {
 
 /**
  * The core plugin class.
- *
- * This is used to define internationalization, admin-specific hooks, and
- * public-facing site hooks.
- *
- * Also maintains the unique identifier of this plugin as well as the current
- * version of the plugin.
  */
 class WC1C {
 
@@ -31,21 +24,21 @@ class WC1C {
      * The loader that's responsible for maintaining and registering all hooks that power
      * the plugin.
      *
-     * @var WC1C_Loader $loader Maintains and registers all hooks for the plugin.
+     * @var      WC1C_Loader    $loader    Maintains and registers all hooks for the plugin.
      */
     protected $loader;
 
     /**
      * The unique identifier of this plugin.
      *
-     * @var string $plugin_name The string used to uniquely identify this plugin.
+     * @var      string    $plugin_name    The string used to uniquely identify this plugin.
      */
     protected $plugin_name;
 
     /**
      * The current version of the plugin.
      *
-     * @var string $version The current version of the plugin.
+     * @var      string    $version    The current version of the plugin.
      */
     protected $version;
 
@@ -57,11 +50,7 @@ class WC1C {
      * the public-facing side of the site.
      */
     public function __construct() {
-        if (defined('WC1C_VERSION')) {
-            $this->version = WC1C_VERSION;
-        } else {
-            $this->version = '1.0.0';
-        }
+        $this->version = WC1C_VERSION;
         $this->plugin_name = 'woocommerce-1c-integration';
 
         $this->load_dependencies();
@@ -74,17 +63,35 @@ class WC1C {
     /**
      * Load the required dependencies for this plugin.
      *
-     * @since    1.0.0
+     * Create an instance of the loader which will be used to register the hooks
+     * with WordPress.
+     *
      * @access   private
      */
     private function load_dependencies() {
-        require_once plugin_dir_path(dirname(__FILE__)) . 'includes/class-wc1c-loader.php';
-        require_once plugin_dir_path(dirname(__FILE__)) . 'includes/class-wc1c-i18n.php';
-        require_once plugin_dir_path(dirname(__FILE__)) . 'admin/class-wc1c-admin.php';
-        require_once plugin_dir_path(dirname(__FILE__)) . 'public/class-wc1c-public.php';
-        require_once plugin_dir_path(dirname(__FILE__)) . 'exchange/class-wc1c-exchange.php';
+        // The class responsible for orchestrating the actions and filters of the core plugin.
+        require_once WC1C_PLUGIN_DIR . 'includes/class-wc1c-loader.php';
 
+        // The class responsible for defining internationalization functionality of the plugin.
+        require_once WC1C_PLUGIN_DIR . 'includes/class-wc1c-i18n.php';
+        
+        // The class responsible for logging plugin events.
+        require_once WC1C_PLUGIN_DIR . 'includes/class-wc1c-logger.php';
+
+        // The class responsible for defining all actions that occur in the admin area.
+        require_once WC1C_PLUGIN_DIR . 'admin/class-wc1c-admin.php';
+
+        // The class responsible for defining all actions that occur in the public-facing side.
+        require_once WC1C_PLUGIN_DIR . 'public/class-wc1c-public.php';
+        
+        // The class responsible for the exchange functionality.
+        require_once WC1C_PLUGIN_DIR . 'exchange/class-wc1c-exchange.php';
+
+        // Create loader instance
         $this->loader = new WC1C_Loader();
+        
+        // Create directories needed for plugin operation
+        $this->create_directories();
     }
 
     /**
@@ -92,6 +99,8 @@ class WC1C {
      *
      * Uses the WC1C_i18n class in order to set the domain and to register the hook
      * with WordPress.
+     *
+     * @access   private
      */
     private function set_locale() {
         $plugin_i18n = new WC1C_i18n();
@@ -101,42 +110,103 @@ class WC1C {
     /**
      * Register all of the hooks related to the admin area functionality
      * of the plugin.
+     *
+     * @access   private
      */
     private function define_admin_hooks() {
         $plugin_admin = new WC1C_Admin($this->get_plugin_name(), $this->get_version());
-        
+
+        // Admin styles and scripts
         $this->loader->add_action('admin_enqueue_scripts', $plugin_admin, 'enqueue_styles');
         $this->loader->add_action('admin_enqueue_scripts', $plugin_admin, 'enqueue_scripts');
-        $this->loader->add_action('admin_menu', $plugin_admin, 'add_plugin_admin_menu');
-        $this->loader->add_action('admin_init', $plugin_admin, 'admin_init');
+        
+        // Admin menu and settings
+        $this->loader->add_action('admin_menu', $plugin_admin, 'add_menu_pages');
+        $this->loader->add_action('admin_init', $plugin_admin, 'register_settings');
+        
+        // Plugin links
+        $this->loader->add_filter('plugin_action_links_' . WC1C_PLUGIN_BASENAME, $plugin_admin, 'add_action_links');
+        $this->loader->add_filter('plugin_row_meta', $plugin_admin, 'add_plugin_row_meta', 10, 2);
+        
+        // Ajax handlers
+        $this->loader->add_action('wp_ajax_wc1c_clear_logs', $plugin_admin, 'ajax_clear_logs');
+        $this->loader->add_action('wp_ajax_wc1c_get_logs', $plugin_admin, 'ajax_get_logs');
+        $this->loader->add_action('wp_ajax_wc1c_test_connection', $plugin_admin, 'ajax_test_connection');
+        
+        // Maintenance tasks
+        $this->loader->add_action('admin_init', $plugin_admin, 'schedule_maintenance_tasks');
     }
 
     /**
      * Register all of the hooks related to the public-facing functionality
      * of the plugin.
+     *
+     * @access   private
      */
     private function define_public_hooks() {
         $plugin_public = new WC1C_Public($this->get_plugin_name(), $this->get_version());
-        
+
         $this->loader->add_action('wp_enqueue_scripts', $plugin_public, 'enqueue_styles');
         $this->loader->add_action('wp_enqueue_scripts', $plugin_public, 'enqueue_scripts');
     }
-
+    
     /**
      * Register all of the hooks related to the exchange functionality
      * of the plugin.
+     *
+     * @access   private
      */
     private function define_exchange_hooks() {
-        $plugin_exchange = new WC1C_Exchange($this->get_plugin_name(), $this->get_version());
+        $exchange = new WC1C_Exchange($this->get_plugin_name(), $this->get_version());
         
-        $this->loader->add_action('init', $plugin_exchange, 'add_rewrite_rules');
-        $this->loader->add_filter('query_vars', $plugin_exchange, 'add_query_vars');
-        $this->loader->add_action('template_redirect', $plugin_exchange, 'handle_exchange_request');
-        $this->loader->add_action('rest_api_init', $plugin_exchange, 'register_rest_routes');
+        // Exchange endpoints
+        $this->loader->add_action('init', $exchange, 'register_endpoints');
+        $this->loader->add_action('parse_request', $exchange, 'handle_request');
+        
+        // Order hooks
+        $this->loader->add_action('woocommerce_new_order', $exchange, 'on_new_order');
+        $this->loader->add_action('woocommerce_order_status_changed', $exchange, 'on_order_status_changed', 10, 3);
+        
+        // Maintenance
+        $this->loader->add_action('wc1c_cleanup_temp_files', $exchange, 'cleanup_temp_files');
+    }
+    
+    /**
+     * Create necessary directories for plugin operation
+     */
+    private function create_directories() {
+        // Make sure upload directory exists
+        if (!is_dir(WC1C_DATA_DIR)) {
+            wp_mkdir_p(WC1C_DATA_DIR);
+        }
+        
+        // Create subdirectories
+        $dirs = array(
+            WC1C_DATA_DIR . 'logs/',
+            WC1C_DATA_DIR . 'images/',
+            WC1C_DATA_DIR . 'temp/',
+            WC1C_DATA_DIR . 'import/',
+        );
+        
+        foreach ($dirs as $dir) {
+            if (!is_dir($dir)) {
+                wp_mkdir_p($dir);
+            }
+        }
+        
+        // Create index.php files to prevent directory listing
+        $index_file = "<?php\n// Silence is golden.";
+        @file_put_contents(WC1C_DATA_DIR . 'index.php', $index_file);
+        
+        foreach ($dirs as $dir) {
+            @file_put_contents($dir . '/index.php', $index_file);
+        }
     }
 
     /**
-     * Run the loader to execute all of the hooks with WordPress.
+     * Run the loader to execute all the hooks with WordPress.
+     *
+     * @since    1.0.0
      */
     public function run() {
         $this->loader->run();
@@ -145,6 +215,8 @@ class WC1C {
     /**
      * The name of the plugin used to uniquely identify it within the context of
      * WordPress and to define internationalization functionality.
+     *
+     * @return    string    The name of the plugin.
      */
     public function get_plugin_name() {
         return $this->plugin_name;
@@ -152,6 +224,8 @@ class WC1C {
 
     /**
      * The reference to the class that orchestrates the hooks with the plugin.
+     *
+     * @return    WC1C_Loader    Orchestrates the hooks of the plugin.
      */
     public function get_loader() {
         return $this->loader;
@@ -159,104 +233,81 @@ class WC1C {
 
     /**
      * Retrieve the version number of the plugin.
+     *
+     * @return    string    The version number of the plugin.
      */
     public function get_version() {
         return $this->version;
     }
-
+    
     /**
-     * Get post ID by meta key and value
+     * Helper function to get post by custom meta field value
+     *
+     * @param string $meta_key Meta key to search by
+     * @param string $meta_value Meta value to search for
+     * @return int|null Post ID or null if not found
      */
-    public static function get_post_id_by_meta($meta_key, $meta_value) {
+    public function get_post_id_by_meta($meta_key, $meta_value) {
         global $wpdb;
         
         $post_id = $wpdb->get_var($wpdb->prepare(
-            "SELECT post_id FROM {$wpdb->postmeta} 
-             WHERE meta_key = %s AND meta_value = %s 
-             LIMIT 1",
+            "SELECT post_id FROM {$wpdb->postmeta} WHERE meta_key = %s AND meta_value = %s LIMIT 1",
             $meta_key,
             $meta_value
         ));
         
-        return $post_id ? intval($post_id) : false;
+        return $post_id ? (int) $post_id : null;
     }
-
+    
     /**
-     * Get term ID by meta key and value
+     * Helper function to get term by custom meta field value
+     *
+     * @param string $meta_key Meta key to search by
+     * @param string $meta_value Meta value to search for
+     * @return int|null Term ID or null if not found
      */
-    public static function get_term_id_by_meta($meta_key, $meta_value) {
+    public function get_term_id_by_meta($meta_key, $meta_value) {
         global $wpdb;
         
         $term_id = $wpdb->get_var($wpdb->prepare(
-            "SELECT term_id FROM {$wpdb->termmeta} 
-             WHERE meta_key = %s AND meta_value = %s 
-             LIMIT 1",
+            "SELECT term_id FROM {$wpdb->termmeta} WHERE meta_key = %s AND meta_value = %s LIMIT 1",
             $meta_key,
             $meta_value
         ));
         
-        return $term_id ? intval($term_id) : false;
+        return $term_id ? (int) $term_id : null;
     }
-
+    
     /**
-     * Get WooCommerce attribute by ID
+     * Helper function to get WooCommerce attribute by ID
+     *
+     * @param int $attribute_id Attribute ID
+     * @return array|null Attribute data or null if not found
      */
-    public static function get_woocommerce_attribute_by_id($attribute_id) {
+    public function get_woocommerce_attribute_by_id($attribute_id) {
         global $wpdb;
         
-        return $wpdb->get_row($wpdb->prepare(
-            "SELECT * FROM {$wpdb->prefix}woocommerce_attribute_taxonomies 
-             WHERE attribute_id = %d",
+        $attribute = $wpdb->get_row($wpdb->prepare(
+            "SELECT * FROM {$wpdb->prefix}woocommerce_attribute_taxonomies WHERE attribute_id = %d",
             $attribute_id
-        ));
+        ), ARRAY_A);
+        
+        return $attribute;
     }
-
+    
     /**
-     * Delete WooCommerce attribute
+     * Helper function to parse decimal value
+     * 
+     * @param mixed $value Value to parse
+     * @return float Parsed decimal value
      */
-    public static function delete_woocommerce_attribute($attribute_id) {
-        global $wpdb;
+    public function parse_decimal($value) {
+        // Replace comma with dot for proper float conversion
+        $value = str_replace(',', '.', $value);
         
-        $attribute = self::get_woocommerce_attribute_by_id($attribute_id);
-        if (!$attribute) {
-            return false;
-        }
+        // Remove all non-numeric characters except dot
+        $value = preg_replace('/[^0-9.-]/', '', $value);
         
-        // Delete attribute taxonomy
-        $taxonomy = wc_attribute_taxonomy_name($attribute->attribute_name);
-        if (taxonomy_exists($taxonomy)) {
-            $terms = get_terms(array('taxonomy' => $taxonomy, 'hide_empty' => false));
-            foreach ($terms as $term) {
-                wp_delete_term($term->term_id, $taxonomy);
-            }
-        }
-        
-        // Delete from database
-        $wpdb->delete(
-            $wpdb->prefix . 'woocommerce_attribute_taxonomies',
-            array('attribute_id' => $attribute_id),
-            array('%d')
-        );
-        
-        delete_transient('wc_attribute_taxonomies');
-        
-        return true;
-    }
-
-    /**
-     * Parse decimal number from string
-     */
-    public static function parse_decimal($number) {
-        return wc_format_decimal($number);
-    }
-
-    /**
-     * Check for WordPress database errors
-     */
-    public static function check_wpdb_error() {
-        global $wpdb;
-        if (!empty($wpdb->last_error)) {
-            throw new Exception('Database error: ' . $wpdb->last_error);
-        }
+        return (float) $value;
     }
 }

@@ -1,10 +1,10 @@
 <?php
 /**
- * Main exchange functionality
+ * The exchange protocol handling functionality
  *
- * @package    WooCommerce_1C_Integration
+ * @package WooCommerce_1C_Integration
  * @subpackage WooCommerce_1C_Integration/exchange
- * @author     Igor Melnyk <igormelnykit@gmail.com>
+ * @author Igor Melnyk <igor.melnyk.it@gmail.com>
  */
 
 // Prevent direct access
@@ -13,7 +13,7 @@ if (!defined('ABSPATH')) {
 }
 
 /**
- * Main exchange functionality for 1C integration
+ * Exchange class
  */
 class WC1C_Exchange {
 
@@ -32,1273 +32,802 @@ class WC1C_Exchange {
     private $version;
 
     /**
-     * Exchange data directory
-     *
-     * @var string
-     */
-    private $data_dir;
-
-    /**
-     * Current exchange session
-     *
-     * @var array
-     */
-    private $session;
-
-    /**
      * Initialize the class and set its properties.
      *
-     * @param string $plugin_name The name of the plugin.
-     * @param string $version     The version of this plugin.
+     * @param string $plugin_name The name of this plugin.
+     * @param string $version The version of this plugin.
      */
     public function __construct($plugin_name, $version) {
         $this->plugin_name = $plugin_name;
         $this->version = $version;
-        
-        $upload_dir = wp_upload_dir();
-        $this->data_dir = $upload_dir['basedir'] . '/woocommerce-1c-integration';
-        
-        $this->init_session();
     }
 
     /**
-     * Add rewrite rules for exchange endpoints
+     * Register exchange endpoints
      */
-    public function add_rewrite_rules() {
-        add_rewrite_rule(
-            '^wc1c/exchange/?$',
-            'index.php?wc1c_action=exchange',
-            'top'
-        );
-        
-        add_rewrite_rule(
-            '^wc1c/api/([^/]+)/?$',
-            'index.php?wc1c_action=api&wc1c_endpoint=$matches[1]',
-            'top'
-        );
-
-        // Add query vars
-        add_filter('query_vars', array($this, 'add_query_vars'));
+    public function register_endpoints() {
+        add_rewrite_rule('^1c-exchange/?$', 'index.php?1c-exchange=true', 'top');
+        add_rewrite_tag('%1c-exchange%', 'true');
     }
 
     /**
-     * Add query variables
+     * Handle exchange request
      *
-     * @param array $vars Query variables
-     * @return array
+     * @param WP $wp WordPress request object
      */
-    public function add_query_vars($vars) {
-        $vars[] = 'wc1c_action';
-        $vars[] = 'wc1c_endpoint';
-        return $vars;
-    }
-
-    /**
-     * Handle exchange requests
-     */
-    public function handle_exchange_request() {
-        $action = get_query_var('wc1c_action');
-        
-        if (empty($action)) {
+    public function handle_request($wp) {
+        // Check if this is our endpoint
+        if (!isset($wp->query_vars['1c-exchange'])) {
             return;
         }
+        
+        // Log request
+        WC1C_Logger::info('Received 1C exchange request', array(
+            'method' => $_SERVER['REQUEST_METHOD'],
+            'query' => $_SERVER['QUERY_STRING'],
+            'user_agent' => isset($_SERVER['HTTP_USER_AGENT']) ? $_SERVER['HTTP_USER_AGENT'] : 'Unknown'
+        ));
+        
+        // Disable caching
+        $this->disable_caching();
+        
+        // Check authentication
+        if (!$this->authenticate()) {
+            $this->send_response('failure', '401 Unauthorized');
+            exit;
+        }
+        
+        // Process request
+        $this->process_request();
+        
+        // Stop WordPress execution after our response
+        exit;
+    }
 
-        // Set up exchange environment
-        $this->setup_exchange_environment();
+    /**
+     * Disable caching for exchange requests
+     */
+    private function disable_caching() {
+        // Disable caching plugins
+        if (!defined('DONOTCACHEPAGE')) {
+            define('DONOTCACHEPAGE', true);
+        }
+        
+        if (!defined('DONOTCACHEDB')) {
+            define('DONOTCACHEDB', true);
+        }
+        
+        if (!defined('DONOTMINIFY')) {
+            define('DONOTMINIFY', true);
+        }
+        
+        if (!defined('DONOTCDN')) {
+            define('DONOTCDN', true);
+        }
+        
+        // Set no-cache headers
+        header('Cache-Control: no-cache, no-store, must-revalidate');
+        header('Pragma: no-cache');
+        header('Expires: 0');
+        
+        // Increase PHP limits for import operations
+        @set_time_limit(0);
+        @ini_set('memory_limit', '512M');
+    }
 
-        try {
-            switch ($action) {
-                case 'exchange':
-                    $this->handle_1c_exchange();
-                    break;
-                    
-                case 'api':
-                    $this->handle_api_request();
-                    break;
-                    
-                default:
-                    $this->send_error_response('Invalid action', 400);
+    /**
+     * Authenticate exchange request
+     *
+     * @return bool Authentication result
+     */
+    private function authenticate() {
+        // Check if authentication is enabled
+        if (get_option('wc1c_auth_enabled', 'yes') !== 'yes') {
+            return true;
+        }
+        
+        // Get credentials
+        $username = get_option('wc1c_auth_username');
+        $password = get_option('wc1c_auth_password');
+        
+        // Verify basic auth
+        if (isset($_SERVER['PHP_AUTH_USER']) && isset($_SERVER['PHP_AUTH_PW'])) {
+            $auth_user = $_SERVER['PHP_AUTH_USER'];
+            $auth_pass = $_SERVER['PHP_AUTH_PW'];
+            
+            if ($auth_user === $username && $auth_pass === $password) {
+                WC1C_Logger::debug('Authentication successful', array(
+                    'username' => $auth_user
+                ));
+                return true;
             }
-        } catch (Exception $e) {
-            WC1C_Logger::log('Exchange error: ' . $e->getMessage(), 'error', array(
-                'action' => $action,
-                'trace' => $e->getTraceAsString()
+        }
+        
+        // Send auth headers if authentication failed
+        header('WWW-Authenticate: Basic realm="1C Exchange"');
+        
+        WC1C_Logger::warning('Authentication failed', array(
+            'username' => isset($_SERVER['PHP_AUTH_USER']) ? $_SERVER['PHP_AUTH_USER'] : 'Unknown'
+        ));
+        
+        return false;
+    }
+
+    /**
+     * Process exchange request
+     */
+    private function process_request() {
+        // Check required GET parameters
+        if (!isset($_GET['type']) || !isset($_GET['mode'])) {
+            WC1C_Logger::error('Missing required parameters', array(
+                'query' => $_SERVER['QUERY_STRING']
             ));
-            $this->send_error_response($e->getMessage(), 500);
+            $this->send_response('failure', 'Missing required parameters');
+            return;
+        }
+        
+        $type = sanitize_text_field($_GET['type']);
+        $mode = sanitize_text_field($_GET['mode']);
+        
+        // Process request based on type and mode
+        switch ($type) {
+            case 'catalog':
+                $this->process_catalog_request($mode);
+                break;
+                
+            case 'sale':
+                $this->process_sale_request($mode);
+                break;
+                
+            default:
+                WC1C_Logger::error('Unknown request type', array(
+                    'type' => $type,
+                    'mode' => $mode
+                ));
+                $this->send_response('failure', 'Unknown request type');
+                break;
         }
     }
 
     /**
-     * Handle 1C exchange protocol
+     * Process catalog request
+     *
+     * @param string $mode Request mode
      */
-    private function handle_1c_exchange() {
-        $type = sanitize_text_field($_GET['type'] ?? '');
-        $mode = sanitize_text_field($_GET['mode'] ?? '');
-        $filename = sanitize_file_name($_GET['filename'] ?? '');
-
-        // Validate parameters
-        if (empty($type) || empty($mode)) {
-            $this->send_error_response('Missing required parameters', 400);
-        }
-
-        // Validate type
-        $allowed_types = array('catalog', 'sale');
-        if (!in_array($type, $allowed_types)) {
-            $this->send_error_response('Invalid type parameter', 400);
-        }
-
-        // Validate mode
-        $allowed_modes = array('checkauth', 'init', 'file', 'import', 'query', 'success');
-        if (!in_array($mode, $allowed_modes)) {
-            $this->send_error_response('Invalid mode parameter', 400);
-        }
-
-        WC1C_Logger::log("Exchange request: type={$type}, mode={$mode}, filename={$filename}", 'info');
-
-        // Handle different modes
+    private function process_catalog_request($mode) {
         switch ($mode) {
             case 'checkauth':
-                $this->handle_checkauth();
+                $this->process_checkauth();
                 break;
                 
             case 'init':
-                $this->handle_init($type);
+                $this->process_init();
                 break;
                 
             case 'file':
-                $this->handle_file($type, $filename);
+                $this->process_file();
                 break;
                 
             case 'import':
-                $this->handle_import($type, $filename);
+                $this->process_import();
+                break;
+                
+            default:
+                WC1C_Logger::error('Unknown catalog mode', array(
+                    'mode' => $mode
+                ));
+                $this->send_response('failure', 'Unknown catalog mode');
+                break;
+        }
+    }
+
+    /**
+     * Process sale request
+     *
+     * @param string $mode Request mode
+     */
+    private function process_sale_request($mode) {
+        switch ($mode) {
+            case 'checkauth':
+                $this->process_checkauth();
+                break;
+                
+            case 'init':
+                $this->process_init();
                 break;
                 
             case 'query':
-                $this->handle_query($type);
+                $this->process_query();
                 break;
                 
             case 'success':
-                $this->handle_success($type);
+                $this->process_success();
+                break;
+                
+            default:
+                WC1C_Logger::error('Unknown sale mode', array(
+                    'mode' => $mode
+                ));
+                $this->send_response('failure', 'Unknown sale mode');
                 break;
         }
     }
 
     /**
-     * Handle authentication check
+     * Process checkauth mode
      */
-    private function handle_checkauth() {
-        $auth = new WC1C_Auth();
+    private function process_checkauth() {
+        // Generate session cookie name
+        $cookie_name = 'wc1c_exchange_' . md5(uniqid('', true));
         
-        if ($auth->authenticate()) {
-            $cookie = $auth->generate_session_cookie();
-            $this->send_success_response("success\nwc1c-auth\n{$cookie}");
-        } else {
-            $this->send_error_response('Authentication failed', 401);
-        }
+        // Set cookie
+        setcookie($cookie_name, '1', time() + 3600, '/');
+        
+        // Send response
+        echo "success\n";
+        echo $cookie_name . "\n";
+        echo md5(time()) . "\n";
+        
+        WC1C_Logger::info('Checkauth successful');
     }
 
     /**
-     * Handle initialization
+     * Process init mode
      */
-    private function handle_init($type) {
-        // Check authentication
-        $auth = new WC1C_Auth();
-        if (!$auth->is_authenticated()) {
-            $this->send_error_response('Not authenticated', 401);
+    private function process_init() {
+        // Clean up temporary files
+        $this->cleanup_temp_files();
+        
+        // Create temp directory if not exists
+        $temp_dir = WC1C_DATA_DIR . 'temp/';
+        if (!file_exists($temp_dir)) {
+            wp_mkdir_p($temp_dir);
         }
-
-        // Ensure directories exist
-        $this->ensure_directories($type);
-
-        // Clean up old files if needed
-        if (get_option('wc1c_cleanup_garbage', 'yes') === 'yes') {
-            $this->cleanup_old_files($type);
-        }
-
-        // Check system capabilities
-        $capabilities = $this->get_system_capabilities();
-
-        $response = "zip=yes\nfile_limit={$capabilities['file_limit']}";
-        $this->send_success_response($response);
+        
+        // Get max file size
+        $max_file_size = get_option('wc1c_max_file_size', 10) * 1024 * 1024; // Convert MB to bytes
+        
+        // Send response
+        echo "zip=no\n";
+        echo "file_limit=" . $max_file_size . "\n";
+        
+        WC1C_Logger::info('Init successful', array(
+            'max_file_size' => $max_file_size
+        ));
     }
 
     /**
-     * Handle file upload
+     * Process file mode
      */
-    private function handle_file($type, $filename) {
-        // Check authentication
-        $auth = new WC1C_Auth();
-        if (!$auth->is_authenticated()) {
-            $this->send_error_response('Not authenticated', 401);
-        }
-
-        if (empty($filename)) {
-            $this->send_success_response('success');
+    private function process_file() {
+        // Get filename from GET parameters
+        if (!isset($_GET['filename'])) {
+            WC1C_Logger::error('Missing filename parameter');
+            $this->send_response('failure', 'Missing filename parameter');
             return;
         }
-
-        // Validate filename
-        if (!$this->is_valid_filename($filename)) {
-            $this->send_error_response('Invalid filename', 400);
-        }
-
-        // Handle file upload
-        $file_handler = new WC1C_File_Handler($this->data_dir);
-        $result = $file_handler->handle_upload($type, $filename);
-
-        if ($result) {
-            WC1C_Logger::log("File uploaded: {$filename}", 'info');
-            
-            // If this is a sale type, process immediately
-            if ($type === 'sale') {
-                $this->process_sale_files();
-            }
-            
-            $this->send_success_response('success');
-        } else {
-            $this->send_error_response('File upload failed', 500);
-        }
-    }
-
-    /**
-     * Handle import
-     */
-    private function handle_import($type, $filename) {
-        // Check authentication
-        $auth = new WC1C_Auth();
-        if (!$auth->is_authenticated()) {
-            $this->send_error_response('Not authenticated', 401);
-        }
-
-        if (empty($filename)) {
-            $this->send_error_response('Filename required for import', 400);
-        }
-
-        // Start transaction
-        $this->start_transaction();
-
-        try {
-            $importer = $this->get_importer($type, $filename);
-            $result = $importer->import();
-
-            $this->commit_transaction();
-            
-            WC1C_Logger::log("Import completed: {$filename}", 'info', $result);
-            $this->send_success_response('success');
-            
-        } catch (Exception $e) {
-            $this->rollback_transaction();
-            throw $e;
-        }
-    }
-
-    /**
-     * Handle query (export orders to 1C)
-     */
-    private function handle_query($type) {
-        // Check authentication
-        $auth = new WC1C_Auth();
-        if (!$auth->is_authenticated()) {
-            $this->send_error_response('Not authenticated', 401);
-        }
-
-        $exporter = new WC1C_Orders();
-        $xml = $exporter->export_orders();
-
-        header('Content-Type: text/xml; charset=UTF-8');
-        echo $xml;
-        exit;
-    }
-
-    /**
-     * Handle success confirmation
-     */
-    private function handle_success($type) {
-        // Check authentication
-        $auth = new WC1C_Auth();
-        if (!$auth->is_authenticated()) {
-            $this->send_error_response('Not authenticated', 401);
-        }
-
-        // Mark orders as successfully exported
-        $orders = new WC1C_Orders();
-        $orders->mark_orders_as_exported();
-
-        // Clean up temporary files
-        $this->cleanup_temp_files($type);
-
-        // Update last sync time
-        update_option('wc1c_last_sync', current_time('mysql'));
-
-        WC1C_Logger::log("Exchange completed successfully for type: {$type}", 'info');
-        $this->send_success_response('success');
-    }
-
-    /**
-     * Handle API requests
-     */
-    private function handle_api_request() {
-        $endpoint = get_query_var('wc1c_endpoint');
         
-        // Check authentication for API
-        $auth = new WC1C_Auth();
-        if (!$auth->is_authenticated()) {
-            $this->send_json_error('Not authenticated', 401);
+        // Sanitize filename
+        $filename = sanitize_file_name($_GET['filename']);
+        
+        // Create temp directory if not exists
+        $temp_dir = WC1C_DATA_DIR . 'temp/';
+        if (!file_exists($temp_dir)) {
+            wp_mkdir_p($temp_dir);
         }
-
-        switch ($endpoint) {
-            case 'status':
-                $this->api_get_status();
-                break;
-                
-            case 'sync':
-                $this->api_manual_sync();
-                break;
-                
-            case 'logs':
-                $this->api_get_logs();
-                break;
-                
-            default:
-                $this->send_json_error('Invalid endpoint', 404);
-        }
-    }
-
-    /**
-     * Register REST API routes
-     */
-    public function register_rest_routes() {
-        register_rest_route('wc1c/v1', '/status', array(
-            'methods' => 'GET',
-            'callback' => array($this, 'rest_get_status'),
-            'permission_callback' => array($this, 'check_rest_permissions')
-        ));
-
-        register_rest_route('wc1c/v1', '/sync', array(
-            'methods' => 'POST',
-            'callback' => array($this, 'rest_manual_sync'),
-            'permission_callback' => array($this, 'check_rest_permissions')
-        ));
-    }
-
-    /**
-     * Check REST API permissions
-     */
-    public function check_rest_permissions() {
-        return current_user_can('manage_woocommerce');
-    }
-
-    /**
-     * Manual sync functionality
-     */
-    public function manual_sync($type = 'full') {
-        WC1C_Logger::log("Manual sync started: {$type}", 'info');
-
-        $start_time = microtime(true);
-        $start_memory = memory_get_usage(true);
-
-        try {
-            switch ($type) {
-                case 'products':
-                    $result = $this->sync_products();
-                    break;
-                    
-                case 'orders':
-                    $result = $this->sync_orders();
-                    break;
-                    
-                case 'full':
-                default:
-                    $result = $this->sync_full();
-                    break;
+        
+        // Build file path
+        $file_path = $temp_dir . $filename;
+        
+        // Check if this is an image file
+        if (preg_match('/\.(jpg|jpeg|png|gif)$/i', $filename)) {
+            // Get images directory
+            $images_dir = get_option('wc1c_images_dir', WC1C_DATA_DIR . 'images/');
+            
+            // Create directory if not exists
+            if (!file_exists($images_dir)) {
+                wp_mkdir_p($images_dir);
             }
-
-            $execution_time = microtime(true) - $start_time;
-            $memory_used = memory_get_usage(true) - $start_memory;
-
-            WC1C_Logger::log("Manual sync completed", 'info', array(
-                'type' => $type,
-                'execution_time' => $execution_time,
-                'memory_used' => size_format($memory_used),
-                'result' => $result
+            
+            // Build image path
+            $file_path = $images_dir . $filename;
+        }
+        
+        // Get file data from PHP input stream
+        $file_data = file_get_contents('php://input');
+        
+        if ($file_data === false) {
+            WC1C_Logger::error('Failed to read file data from input stream');
+            $this->send_response('failure', 'Failed to read file data');
+            return;
+        }
+        
+        // Get max file size
+        $max_file_size = get_option('wc1c_max_file_size', 10) * 1024 * 1024; // Convert MB to bytes
+        
+        // Check file size
+        if (strlen($file_data) > $max_file_size) {
+            WC1C_Logger::error('File exceeds maximum size', array(
+                'filename' => $filename,
+                'size' => strlen($file_data),
+                'max_size' => $max_file_size
             ));
-
-            return $result;
-
-        } catch (Exception $e) {
-            WC1C_Logger::log("Manual sync failed: " . $e->getMessage(), 'error');
-            throw $e;
+            $this->send_response('failure', 'File exceeds maximum size');
+            return;
         }
-    }
-
-    /**
-     * Setup exchange environment
-     */
-    private function setup_exchange_environment() {
-        // Disable time limit
-        $this->disable_time_limit();
-
-        // Set memory limit
-        $this->set_memory_limit();
-
-        // Set error handling
-        set_error_handler(array($this, 'handle_exchange_error'));
-        set_exception_handler(array($this, 'handle_exchange_exception'));
-
-        // Set output buffering
-        ob_start();
-    }
-
-    /**
-     * Get system capabilities
-     */
-    private function get_system_capabilities() {
-        $file_limits = array(
-            $this->filesize_to_bytes('10M'),
-            $this->filesize_to_bytes(ini_get('post_max_size')),
-            $this->filesize_to_bytes(ini_get('memory_limit')),
-        );
-
-        // Check available memory
-        if (function_exists('exec')) {
-            @exec("grep ^MemFree: /proc/meminfo", $output, $status);
-            if ($status === 0 && !empty($output)) {
-                $output = preg_split("/\s+/", $output[0]);
-                $file_limits[] = intval($output[1] * 1000 * 0.7);
-            }
-        }
-
-        // Apply custom file limit
-        $custom_limit = get_option('wc1c_file_limit', '100M');
-        if ($custom_limit) {
-            $file_limits[] = $this->filesize_to_bytes($custom_limit);
-        }
-
-        return array(
-            'file_limit' => min($file_limits),
-            'zip_support' => class_exists('ZipArchive') || $this->has_unzip_command(),
-            'memory_limit' => ini_get('memory_limit'),
-            'max_execution_time' => ini_get('max_execution_time')
-        );
-    }
-
-    /**
-     * Convert filesize string to bytes
-     */
-    private function filesize_to_bytes($filesize) {
-        switch (substr($filesize, -1)) {
-            case 'G':
-            case 'g':
-                return (int) $filesize * 1073741824;
-            case 'M':
-            case 'm':
-                return (int) $filesize * 1048576;
-            case 'K':
-            case 'k':
-                return (int) $filesize * 1024;
-            default:
-                return (int) $filesize;
-        }
-    }
-
-    /**
-     * Check if unzip command is available
-     */
-    private function has_unzip_command() {
-        @exec("which unzip", $_, $status);
-        return $status === 0;
-    }
-
-    /**
-     * Validate filename
-     */
-    private function is_valid_filename($filename) {
-        // Check for path traversal
-        if (strpos($filename, '..') !== false || strpos($filename, '/') !== false || strpos($filename, '\\') !== false) {
-            return false;
-        }
-
-        // Check allowed extensions
-        $allowed_extensions = array('xml', 'zip');
-        $extension = strtolower(pathinfo($filename, PATHINFO_EXTENSION));
         
-        return in_array($extension, $allowed_extensions);
-    }
-
-    /**
-     * Ensure directories exist
-     */
-    private function ensure_directories($type) {
-        $directories = array(
-            $this->data_dir,
-            $this->data_dir . '/' . $type,
-            $this->data_dir . '/temp',
-            $this->data_dir . '/backup'
-        );
-
-        foreach ($directories as $dir) {
-            if (!wp_mkdir_p($dir)) {
-                throw new Exception("Failed to create directory: {$dir}");
-            }
-        }
-    }
-
-    /**
-     * Get appropriate importer
-     */
-    private function get_importer($type, $filename) {
-        $file_path = $this->data_dir . '/' . $type . '/' . $filename;
+        // Write file
+        $result = file_put_contents($file_path, $file_data);
         
+        if ($result === false) {
+            WC1C_Logger::error('Failed to write file', array(
+                'filename' => $filename,
+                'path' => $file_path
+            ));
+            $this->send_response('failure', 'Failed to write file');
+            return;
+        }
+        
+        WC1C_Logger::info('File uploaded successfully', array(
+            'filename' => $filename,
+            'size' => strlen($file_data)
+        ));
+        
+        $this->send_response('success');
+    }
+
+    /**
+     * Process import mode
+     */
+    private function process_import() {
+        // Get filename from GET parameters
+        if (!isset($_GET['filename'])) {
+            WC1C_Logger::error('Missing filename parameter');
+            $this->send_response('failure', 'Missing filename parameter');
+            return;
+        }
+        
+        // Sanitize filename
+        $filename = sanitize_file_name($_GET['filename']);
+        
+        // Build file path
+        $file_path = WC1C_DATA_DIR . 'temp/' . $filename;
+        
+        // Check if file exists
         if (!file_exists($file_path)) {
-            throw new Exception("File not found: {$filename}");
+            WC1C_Logger::error('File not found', array(
+                'filename' => $filename,
+                'path' => $file_path
+            ));
+            $this->send_response('failure', 'File not found');
+            return;
         }
-
-        // Determine importer type based on filename
-        if (strpos($filename, 'import') === 0) {
-            return new WC1C_Import($file_path);
-        } elseif (strpos($filename, 'offers') === 0) {
-            return new WC1C_Offers($file_path);
-        } elseif (strpos($filename, 'orders') === 0) {
-            return new WC1C_Orders($file_path);
-        } else {
-            throw new Exception("Unknown file type: {$filename}");
-        }
-    }
-
-    /**
-     * Initialize session
-     */
-    private function init_session() {
-        $this->session = array(
-            'start_time' => microtime(true),
-            'start_memory' => memory_get_usage(true),
-            'operations' => array()
-        );
-    }
-
-    /**
-     * Start database transaction
-     */
-    private function start_transaction() {
-        global $wpdb;
-        $wpdb->query('START TRANSACTION');
-        WC1C_Logger::log('Transaction started', 'debug');
-    }
-
-    /**
-     * Commit database transaction
-     */
-    private function commit_transaction() {
-        global $wpdb;
-        $wpdb->query('COMMIT');
-        WC1C_Logger::log('Transaction committed', 'debug');
-    }
-
-    /**
-     * Rollback database transaction
-     */
-    private function rollback_transaction() {
-        global $wpdb;
-        $wpdb->query('ROLLBACK');
-        WC1C_Logger::log('Transaction rolled back', 'debug');
-    }
-
-    /**
-     * Disable time limit
-     */
-    private function disable_time_limit() {
-        $disabled_functions = explode(',', ini_get('disable_functions'));
-        if (!in_array('set_time_limit', $disabled_functions)) {
-            $max_time = get_option('wc1c_max_execution_time', 300);
-            @set_time_limit($max_time);
-        }
-    }
-
-    /**
-     * Set memory limit
-     */
-    private function set_memory_limit() {
-        $memory_limit = get_option('wc1c_memory_limit', '512M');
-        @ini_set('memory_limit', $memory_limit);
-    }
-
-    /**
-     * Handle exchange errors
-     */
-    public function handle_exchange_error($errno, $errstr, $errfile = '', $errline = 0) {
-        if (error_reporting() === 0) {
-            return false;
-        }
-
-        $message = "PHP Error: {$errstr} in {$errfile} on line {$errline}";
-        WC1C_Logger::log($message, 'error');
         
-        return true;
-    }
-
-    /**
-     * Handle exchange exceptions
-     */
-    public function handle_exchange_exception($exception) {
-        $message = "Exception: " . $exception->getMessage() . " in " . $exception->getFile() . " on line " . $exception->getLine();
-        WC1C_Logger::log($message, 'error');
+        // Determine import type based on filename
+        $import_type = $this->determine_import_type($filename);
         
-        $this->send_error_response($exception->getMessage(), 500);
-    }
-
-    /**
-     * Send success response
-     */
-    private function send_success_response($message) {
-        header('Content-Type: text/plain; charset=UTF-8');
-        echo $message;
-        exit;
-    }
-
-    /**
-     * Send error response
-     */
-    private function send_error_response($message, $code = 500) {
-        http_response_code($code);
-        header('Content-Type: text/plain; charset=UTF-8');
-        echo "Error: {$message}";
-        exit;
-    }
-
-    /**
-     * Send JSON error response
-     */
-    private function send_json_error($message, $code = 500) {
-        http_response_code($code);
-        wp_send_json_error(array('message' => $message));
-    }
-
-    /**
-     * Cleanup old files
-     */
-    private function cleanup_old_files($type) {
-        $dir = $this->data_dir . '/' . $type;
-        $files = glob($dir . '/*');
+        if ($import_type === false) {
+            WC1C_Logger::error('Unknown import file type', array(
+                'filename' => $filename
+            ));
+            $this->send_response('failure', 'Unknown import file type');
+            return;
+        }
         
-        foreach ($files as $file) {
-            if (is_file($file) && filemtime($file) < (time() - 86400)) { // 24 hours
-                unlink($file);
+        // Process import
+        try {
+            $result = $this->process_import_file($file_path, $import_type);
+            
+            if ($result) {
+                $this->send_response('success');
+            } else {
+                $this->send_response('failure', 'Import processing failed');
+            }
+        } catch (Exception $e) {
+            WC1C_Logger::error('Import exception', array(
+                'filename' => $filename,
+                'exception' => $e->getMessage()
+            ));
+            $this->send_response('failure', 'Import exception: ' . $e->getMessage());
+        }
+    }
+
+    /**
+     * Determine import type based on filename
+     *
+     * @param string $filename Filename
+     * @return string|false Import type or false if unknown
+     */
+    private function determine_import_type($filename) {
+        if (strpos($filename, 'import') !== false) {
+            return 'catalog';
+        } elseif (strpos($filename, 'offers') !== false) {
+            return 'offers';
+        } elseif (strpos($filename, 'prices') !== false) {
+            return 'prices';
+        } elseif (strpos($filename, 'orders') !== false) {
+            return 'orders';
+        }
+        
+        return false;
+    }
+
+    /**
+     * Process import file
+     *
+     * @param string $file_path File path
+     * @param string $import_type Import type
+     * @return bool Success status
+     */
+    private function process_import_file($file_path, $import_type) {
+        // Get processor class name
+        $processor_class = 'WC1C_Processor_' . ucfirst($import_type);
+
+        // Check if processor class exists
+        if (!class_exists($processor_class)) {
+            // Try to load processor class
+            $processor_file = WC1C_PLUGIN_DIR . 'exchange/processors/class-wc1c-processor-' . $import_type . '.php';
+            
+            if (file_exists($processor_file)) {
+                require_once $processor_file;
+            }
+            
+            if (!class_exists($processor_class)) {
+                WC1C_Logger::error('Processor class not found', array(
+                    'class' => $processor_class,
+                    'file' => $processor_file
+                ));
+                return false;
             }
         }
+
+        // Create processor instance
+        $processor = new $processor_class();
+
+        // Process import
+        return $processor->process($file_path);
     }
 
     /**
-     * Cleanup temporary files
+     * Process query mode
      */
-    private function cleanup_temp_files($type) {
-        $temp_dir = $this->data_dir . '/temp';
-        $files = glob($temp_dir . '/*');
+    private function process_query() {
+        // Get export orders XML
+        $xml = $this->generate_orders_xml();
         
+        // Send XML
+        header('Content-Type: text/xml; charset=utf-8');
+        echo $xml;
+        
+        WC1C_Logger::info('Orders query processed');
+    }
+
+    /**
+     * Process success mode
+     */
+    private function process_success() {
+        WC1C_Logger::info('Success mode processed');
+        $this->send_response('success');
+    }
+
+    /**
+     * Generate orders XML
+     *
+     * @return string XML content
+     */
+    private function generate_orders_xml() {
+        // Create XML document
+        $xml = new DOMDocument('1.0', 'UTF-8');
+        $xml->formatOutput = true;
+        
+        // Create root element
+        $root = $xml->createElement('КоммерческаяИнформация');
+        $root->setAttribute('ВерсияСхемы', '2.05');
+        $root->setAttribute('ДатаФормирования', date('Y-m-d\TH:i:s'));
+        $xml->appendChild($root);
+        
+        // Get orders to export
+        $orders = $this->get_orders_to_export();
+        
+        // Process each order
+        foreach ($orders as $order) {
+            $this->add_order_to_xml($xml, $root, $order);
+        }
+        
+        // Return XML as string
+        return $xml->saveXML();
+    }
+
+    /**
+     * Get orders to export
+     *
+     * @return array Orders to export
+     */
+    private function get_orders_to_export() {
+        // Get order statuses to export
+        $statuses = get_option('wc1c_export_order_statuses', array('processing', 'completed'));
+        
+        if (empty($statuses)) {
+            return array();
+        }
+        
+        // Format statuses for query
+        $formatted_statuses = array();
+        foreach ($statuses as $status) {
+            $formatted_statuses[] = 'wc-' . $status;
+        }
+        
+        // Get date from
+        $date_from = get_option('wc1c_export_order_date_from', '');
+        
+        // Query args
+        $args = array(
+            'post_type' => 'shop_order',
+            'post_status' => $formatted_statuses,
+            'posts_per_page' => -1,
+            'fields' => 'ids',
+            'meta_query' => array(
+                'relation' => 'OR',
+                array(
+                    'key' => '_wc1c_exported',
+                    'compare' => 'NOT EXISTS'
+                ),
+                array(
+                    'key' => '_wc1c_exported',
+                    'value' => '0',
+                    'compare' => '='
+                )
+            )
+        );
+        
+        // Add date filter if specified
+        if (!empty($date_from)) {
+            $args['date_query'] = array(
+                array(
+                    'after' => $date_from,
+                    'inclusive' => true
+                )
+            );
+        }
+        
+        // Get order IDs
+        $order_ids = get_posts($args);
+        
+        // Load order objects
+        $orders = array();
+        foreach ($order_ids as $order_id) {
+            $order = wc_get_order($order_id);
+            if ($order) {
+                $orders[] = $order;
+                
+                // Mark as exported
+                update_post_meta($order_id, '_wc1c_exported', '1');
+                update_post_meta($order_id, '_wc1c_exported_date', current_time('mysql'));
+            }
+        }
+        
+        return $orders;
+    }
+
+    /**
+     * Add order to XML
+     *
+     * @param DOMDocument $xml XML document
+     * @param DOMElement $root Root element
+     * @param WC_Order $order Order object
+     */
+    private function add_order_to_xml($xml, $root, $order) {
+        // Create document element
+        $document = $xml->createElement('Документ');
+        $root->appendChild($document);
+        
+        // Add order ID
+        $id = $xml->createElement('Ид', $order->get_id());
+        $document->appendChild($id);
+        
+        // Add order number
+        $number = $xml->createElement('Номер', $order->get_order_number());
+        $document->appendChild($number);
+        
+        // Add order date
+        $date = $xml->createElement('Дата', $order->get_date_created()->format('Y-m-d'));
+        $document->appendChild($date);
+        
+        // Add order time
+        $time = $xml->createElement('Время', $order->get_date_created()->format('H:i:s'));
+        $document->appendChild($time);
+        
+        // Add order currency
+        $currency = $xml->createElement('Валюта', $order->get_currency());
+        $document->appendChild($currency);
+        
+        // Add order total
+        $total = $xml->createElement('Сумма', $order->get_total());
+        $document->appendChild($total);
+        
+        // Add customer info
+        $customer = $xml->createElement('Контрагенты');
+        $document->appendChild($customer);
+        
+        $customer_item = $xml->createElement('Контрагент');
+        $customer->appendChild($customer_item);
+        
+        $customer_id = $xml->createElement('Ид', 'customer_' . $order->get_customer_id());
+        $customer_item->appendChild($customer_id);
+        
+        $customer_name = $xml->createElement('Наименование', $order->get_billing_first_name() . ' ' . $order->get_billing_last_name());
+        $customer_item->appendChild($customer_name);
+        
+        // Add customer contacts
+        $customer_contacts = $xml->createElement('Контакты');
+        $customer_item->appendChild($customer_contacts);
+        
+        // Add email
+        if ($order->get_billing_email()) {
+            $contact = $xml->createElement('Контакт');
+            $customer_contacts->appendChild($contact);
+            
+            $contact_type = $xml->createElement('Тип', 'Почта');
+            $contact->appendChild($contact_type);
+            
+            $contact_value = $xml->createElement('Значение', $order->get_billing_email());
+            $contact->appendChild($contact_value);
+        }
+        
+        // Add phone
+        if ($order->get_billing_phone()) {
+            $contact = $xml->createElement('Контакт');
+            $customer_contacts->appendChild($contact);
+            
+            $contact_type = $xml->createElement('Тип', 'Телефон');
+            $contact->appendChild($contact_type);
+            
+            $contact_value = $xml->createElement('Значение', $order->get_billing_phone());
+            $contact->appendChild($contact_value);
+        }
+        
+        // Add shipping address
+        $shipping_address = $xml->createElement('АдресДоставки');
+        $customer_item->appendChild($shipping_address);
+        
+        // Add address presentation
+        $address_str = '';
+        if ($order->get_shipping_postcode()) {
+            $address_str .= $order->get_shipping_postcode() . ', ';
+        }
+        if ($order->get_shipping_country()) {
+            $address_str .= $order->get_shipping_country() . ', ';
+        }
+        if ($order->get_shipping_state()) {
+            $address_str .= $order->get_shipping_state() . ', ';
+        }
+        if ($order->get_shipping_city()) {
+            $address_str .= $order->get_shipping_city() . ', ';
+        }
+        if ($order->get_shipping_address_1()) {
+            $address_str .= $order->get_shipping_address_1();
+        }
+        if ($order->get_shipping_address_2()) {
+            $address_str .= ', ' . $order->get_shipping_address_2();
+        }
+        
+        $presentation = $xml->createElement('Представление', $address_str);
+        $shipping_address->appendChild($presentation);
+        
+        // Add order items
+        $products = $xml->createElement('Товары');
+        $document->appendChild($products);
+        
+        foreach ($order->get_items() as $item_id => $item) {
+            $product = $item->get_product();
+            
+            // Skip if product doesn't exist
+            if (!$product) {
+                continue;
+            }
+            
+            $product_item = $xml->createElement('Товар');
+            $products->appendChild($product_item);
+            
+            // Get product 1C ID
+            $product_1c_id = get_post_meta($product->get_id(), '_wc1c_id', true);
+            
+            // Use WooCommerce ID if 1C ID not available
+            if (empty($product_1c_id)) {
+                $product_1c_id = 'product_' . $product->get_id();
+            }
+            
+            // Add product ID
+            $product_id = $xml->createElement('Ид', $product_1c_id);
+            $product_item->appendChild($product_id);
+            
+            // Add product name
+            $product_name = $xml->createElement('Наименование', $item->get_name());
+            $product_item->appendChild($product_name);
+            
+            // Add quantity
+            $quantity = $xml->createElement('Количество', $item->get_quantity());
+            $product_item->appendChild($quantity);
+            
+            // Add price
+            $price = $xml->createElement('ЦенаЗаЕдиницу', $order->get_item_subtotal($item));
+            $product_item->appendChild($price);
+            
+            // Add total
+            $item_total = $xml->createElement('Сумма', $item->get_total());
+            $product_item->appendChild($item_total);
+        }
+    }
+
+    /**
+     * Clean up temporary files
+     */
+    private function cleanup_temp_files() {
+        $temp_dir = WC1C_DATA_DIR . 'temp/';
+        
+        // Skip if directory doesn't exist
+        if (!file_exists($temp_dir)) {
+            return;
+        }
+        
+        // Get files in temp directory
+        $files = glob($temp_dir . '*');
+        
+        // Delete each file
         foreach ($files as $file) {
             if (is_file($file)) {
-                unlink($file);
+                @unlink($file);
             }
         }
+        
+        WC1C_Logger::debug('Temporary files cleaned up');
     }
 
     /**
-     * Process sale files
+     * Send response
+     *
+     * @param string $status Response status
+     * @param string $message Optional message
      */
-    private function process_sale_files() {
-        $sale_dir = $this->data_dir . '/sale';
-        $xml_files = glob($sale_dir . '/*.xml');
-        
-        foreach ($xml_files as $file) {
-            $filename = basename($file);
-            try {
-                $importer = $this->get_importer('sale', $filename);
-                $importer->import();
-                WC1C_Logger::log("Processed sale file: {$filename}", 'info');
-            } catch (Exception $e) {
-                WC1C_Logger::log("Failed to process sale file {$filename}: " . $e->getMessage(), 'error');
-            }
-        }
-    }
-
-    /**
-     * API: Get status
-     */
-    private function api_get_status() {
-        $status = array(
-            'plugin_version' => WC1C_VERSION,
-            'last_sync' => get_option('wc1c_last_sync'),
-            'sync_status' => $this->get_sync_status(),
-            'system_info' => $this->get_system_capabilities()
-        );
-        
-        wp_send_json_success($status);
-    }
-
-    /**
-     * API: Manual sync
-     */
-    private function api_manual_sync() {
-        $type = sanitize_text_field($_POST['type'] ?? 'full');
-        
-        try {
-            $result = $this->manual_sync($type);
-            wp_send_json_success($result);
-        } catch (Exception $e) {
-            wp_send_json_error(array('message' => $e->getMessage()));
-        }
-    }
-
-    /**
-     * API: Get logs
-     */
-    private function api_get_logs() {
-        $date = sanitize_text_field($_GET['date'] ?? date('Y-m-d'));
-        $level = sanitize_text_field($_GET['level'] ?? 'all');
-        $limit = intval($_GET['limit'] ?? 100);
-
-        $logs = $this->get_logs($date, $level, $limit);
-        wp_send_json_success($logs);
-    }
-
-    /**
-     * Get logs for API
-     */
-    private function get_logs($date, $level, $limit) {
-        global $wpdb;
-        
-        $table_name = $wpdb->prefix . 'wc1c_exchange_logs';
-        
-        $where_conditions = array("DATE(created_at) = %s");
-        $where_values = array($date);
-        
-        if ($level !== 'all') {
-            $where_conditions[] = "status = %s";
-            $where_values[] = $level;
-        }
-        
-        $where_clause = implode(' AND ', $where_conditions);
-        
-        $query = $wpdb->prepare(
-            "SELECT * FROM {$table_name} 
-             WHERE {$where_clause} 
-             ORDER BY created_at DESC 
-             LIMIT %d",
-            array_merge($where_values, array($limit))
-        );
-        
-        return $wpdb->get_results($query);
-    }
-
-    /**
-     * Get current sync status
-     */
-    private function get_sync_status() {
-        $last_sync = get_option('wc1c_last_sync');
-        $sync_in_progress = get_transient('wc1c_sync_in_progress');
-        
-        if ($sync_in_progress) {
-            return 'in_progress';
-        } elseif ($last_sync) {
-            $last_sync_time = strtotime($last_sync);
-            $hours_since_sync = (time() - $last_sync_time) / 3600;
-            
-            if ($hours_since_sync < 1) {
-                return 'recent';
-            } elseif ($hours_since_sync < 24) {
-                return 'normal';
-            } else {
-                return 'outdated';
+    private function send_response($status, $message = '') {
+        if ($status === 'success') {
+            echo "success\n";
+            if (!empty($message)) {
+                echo $message . "\n";
             }
         } else {
-            return 'never';
-        }
-    }
-
-    /**
-     * Sync products only
-     */
-    private function sync_products() {
-        set_transient('wc1c_sync_in_progress', true, 3600);
-        
-        try {
-            $result = array(
-                'products_processed' => 0,
-                'products_updated' => 0,
-                'products_created' => 0,
-                'errors' => array()
-            );
-
-            // This would typically involve calling 1C API or processing files
-            // For now, we'll simulate the process
-            
-            $products = $this->get_pending_product_updates();
-            
-            foreach ($products as $product_data) {
-                try {
-                    $product_id = $this->process_product_update($product_data);
-                    
-                    if ($product_id) {
-                        $result['products_processed']++;
-                        
-                        if ($this->is_new_product($product_id)) {
-                            $result['products_created']++;
-                        } else {
-                            $result['products_updated']++;
-                        }
-                    }
-                } catch (Exception $e) {
-                    $result['errors'][] = $e->getMessage();
-                    WC1C_Logger::log("Product sync error: " . $e->getMessage(), 'error');
-                }
-            }
-            
-            delete_transient('wc1c_sync_in_progress');
-            return $result;
-            
-        } catch (Exception $e) {
-            delete_transient('wc1c_sync_in_progress');
-            throw $e;
-        }
-    }
-
-    /**
-     * Sync orders only
-     */
-    private function sync_orders() {
-        set_transient('wc1c_sync_in_progress', true, 3600);
-        
-        try {
-            $result = array(
-                'orders_processed' => 0,
-                'orders_exported' => 0,
-                'orders_updated' => 0,
-                'errors' => array()
-            );
-
-            // Export new orders to 1C
-            $orders_exporter = new WC1C_Orders();
-            $export_result = $orders_exporter->export_pending_orders();
-            
-            $result['orders_exported'] = $export_result['exported_count'];
-            $result['orders_processed'] += $export_result['exported_count'];
-            
-            // Import order status updates from 1C
-            $import_result = $orders_exporter->import_order_updates();
-            
-            $result['orders_updated'] = $import_result['updated_count'];
-            $result['orders_processed'] += $import_result['updated_count'];
-            
-            if (!empty($export_result['errors'])) {
-                $result['errors'] = array_merge($result['errors'], $export_result['errors']);
-            }
-            
-            if (!empty($import_result['errors'])) {
-                $result['errors'] = array_merge($result['errors'], $import_result['errors']);
-            }
-            
-            delete_transient('wc1c_sync_in_progress');
-            return $result;
-            
-        } catch (Exception $e) {
-            delete_transient('wc1c_sync_in_progress');
-            throw $e;
-        }
-    }
-
-    /**
-     * Full synchronization
-     */
-    private function sync_full() {
-        set_transient('wc1c_sync_in_progress', true, 7200); // 2 hours for full sync
-        
-        try {
-            $result = array(
-                'products' => array(),
-                'orders' => array(),
-                'categories' => array(),
-                'attributes' => array(),
-                'total_time' => 0,
-                'errors' => array()
-            );
-
-            $start_time = microtime(true);
-
-            // 1. Sync categories first
-            WC1C_Logger::log('Starting category sync', 'info');
-            $result['categories'] = $this->sync_categories();
-
-            // 2. Sync attributes
-            WC1C_Logger::log('Starting attribute sync', 'info');
-            $result['attributes'] = $this->sync_attributes();
-
-            // 3. Sync products
-            WC1C_Logger::log('Starting product sync', 'info');
-            $result['products'] = $this->sync_products();
-
-            // 4. Sync orders
-            WC1C_Logger::log('Starting order sync', 'info');
-            $result['orders'] = $this->sync_orders();
-
-            $result['total_time'] = microtime(true) - $start_time;
-            
-            // Update last full sync time
-            update_option('wc1c_last_full_sync', current_time('mysql'));
-            
-            delete_transient('wc1c_sync_in_progress');
-            return $result;
-            
-        } catch (Exception $e) {
-            delete_transient('wc1c_sync_in_progress');
-            throw $e;
-        }
-    }
-
-    /**
-     * Sync categories
-     */
-    private function sync_categories() {
-        $result = array(
-            'categories_processed' => 0,
-            'categories_created' => 0,
-            'categories_updated' => 0,
-            'errors' => array()
-        );
-
-        // This would typically process category data from 1C
-        // Implementation depends on your specific 1C integration needs
-        
-        return $result;
-    }
-
-    /**
-     * Sync attributes
-     */
-    private function sync_attributes() {
-        $result = array(
-            'attributes_processed' => 0,
-            'attributes_created' => 0,
-            'attributes_updated' => 0,
-            'errors' => array()
-        );
-
-        // This would typically process attribute data from 1C
-        // Implementation depends on your specific 1C integration needs
-        
-        return $result;
-    }
-
-    /**
-     * Get pending product updates
-     */
-    private function get_pending_product_updates() {
-        global $wpdb;
-        
-        $table_name = $wpdb->prefix . 'wc1c_sync_queue';
-        
-        return $wpdb->get_results($wpdb->prepare(
-            "SELECT * FROM {$table_name} 
-             WHERE item_type = 'product' 
-             AND status = 'pending' 
-             AND scheduled_at <= NOW()
-             ORDER BY priority DESC, created_at ASC
-             LIMIT %d",
-            get_option('wc1c_batch_size', 100)
-        ));
-    }
-
-    /**
-     * Process product update
-     */
-    private function process_product_update($product_data) {
-        // This would contain the actual product processing logic
-        // For now, return a mock product ID
-        return rand(1, 1000);
-    }
-
-    /**
-     * Check if product is new
-     */
-    private function is_new_product($product_id) {
-        // Check if this product was created in the current sync
-        return get_post_meta($product_id, '_wc1c_created_in_sync', true) === 'yes';
-    }
-
-    /**
-     * REST API: Get status
-     */
-    public function rest_get_status($request) {
-        return rest_ensure_response($this->api_get_status());
-    }
-
-    /**
-     * REST API: Manual sync
-     */
-    public function rest_manual_sync($request) {
-        $type = $request->get_param('type') ?: 'full';
-        
-        try {
-            $result = $this->manual_sync($type);
-            return rest_ensure_response($result);
-        } catch (Exception $e) {
-            return new WP_Error('sync_failed', $e->getMessage(), array('status' => 500));
-        }
-    }
-
-    /**
-     * Add exchange log entry
-     */
-    public function add_exchange_log($exchange_type, $operation, $status, $message = '', $data = array(), $execution_time = 0) {
-        global $wpdb;
-        
-        $table_name = $wpdb->prefix . 'wc1c_exchange_logs';
-        
-        $wpdb->insert(
-            $table_name,
-            array(
-                'exchange_type' => $exchange_type,
-                'operation' => $operation,
-                'status' => $status,
-                'message' => $message,
-                'data' => wp_json_encode($data),
-                'execution_time' => $execution_time,
-                'memory_usage' => memory_get_usage(true),
-                'created_at' => current_time('mysql')
-            ),
-            array('%s', '%s', '%s', '%s', '%s', '%f', '%d', '%s')
-        );
-        
-        return $wpdb->insert_id;
-    }
-
-    /**
-     * Get exchange statistics
-     */
-    public function get_exchange_stats($days = 30) {
-        global $wpdb;
-        
-        $table_name = $wpdb->prefix . 'wc1c_exchange_logs';
-        
-        return $wpdb->get_results($wpdb->prepare(
-            "SELECT 
-                exchange_type,
-                status,
-                COUNT(*) as count,
-                AVG(execution_time) as avg_time,
-                MAX(execution_time) as max_time,
-                DATE(created_at) as date
-             FROM {$table_name} 
-             WHERE created_at >= DATE_SUB(NOW(), INTERVAL %d DAY)
-             GROUP BY exchange_type, status, DATE(created_at)
-             ORDER BY created_at DESC",
-            $days
-        ));
-    }
-
-    /**
-     * Schedule sync operation
-     */
-    public function schedule_sync($item_type, $item_id, $action, $priority = 10, $data = array()) {
-        global $wpdb;
-        
-        $table_name = $wpdb->prefix . 'wc1c_sync_queue';
-        
-        // Check if item is already in queue
-        $existing = $wpdb->get_var($wpdb->prepare(
-            "SELECT id FROM {$table_name} 
-             WHERE item_type = %s AND item_id = %d AND action = %s AND status = 'pending'",
-            $item_type, $item_id, $action
-        ));
-        
-        if ($existing) {
-            // Update existing entry
-            $wpdb->update(
-                $table_name,
-                array(
-                    'priority' => $priority,
-                    'data' => wp_json_encode($data),
-                    'scheduled_at' => current_time('mysql')
-                ),
-                array('id' => $existing),
-                array('%d', '%s', '%s'),
-                array('%d')
-            );
-            return $existing;
-        } else {
-            // Insert new entry
-            $wpdb->insert(
-                $table_name,
-                array(
-                    'item_type' => $item_type,
-                    'item_id' => $item_id,
-                    'action' => $action,
-                    'priority' => $priority,
-                    'data' => wp_json_encode($data),
-                    'scheduled_at' => current_time('mysql'),
-                    'created_at' => current_time('mysql')
-                ),
-                array('%s', '%d', '%s', '%d', '%s', '%s', '%s')
-            );
-            return $wpdb->insert_id;
-        }
-    }
-
-    /**
-     * Process sync queue
-     */
-    public function process_sync_queue($limit = 50) {
-        global $wpdb;
-        
-        $table_name = $wpdb->prefix . 'wc1c_sync_queue';
-        
-        // Get pending items
-        $items = $wpdb->get_results($wpdb->prepare(
-            "SELECT * FROM {$table_name} 
-             WHERE status = 'pending' 
-             AND attempts < max_attempts
-             AND scheduled_at <= NOW()
-             ORDER BY priority DESC, created_at ASC
-             LIMIT %d",
-            $limit
-        ));
-        
-        $processed = 0;
-        $errors = 0;
-        
-        foreach ($items as $item) {
-            try {
-                // Mark as processing
-                $wpdb->update(
-                    $table_name,
-                    array('status' => 'processing'),
-                    array('id' => $item->id),
-                    array('%s'),
-                    array('%d')
-                );
-                
-                // Process the item
-                $this->process_sync_queue_item($item);
-                
-                // Mark as completed
-                $wpdb->update(
-                    $table_name,
-                    array(
-                        'status' => 'completed',
-                        'processed_at' => current_time('mysql')
-                    ),
-                    array('id' => $item->id),
-                    array('%s', '%s'),
-                    array('%d')
-                );
-                
-                $processed++;
-                
-            } catch (Exception $e) {
-                // Mark as failed and increment attempts
-                $wpdb->update(
-                    $table_name,
-                    array(
-                        'status' => 'failed',
-                        'attempts' => $item->attempts + 1
-                    ),
-                    array('id' => $item->id),
-                    array('%s', '%d'),
-                    array('%d')
-                );
-                
-                WC1C_Logger::log("Sync queue item failed: " . $e->getMessage(), 'error', array(
-                    'item_id' => $item->id,
-                    'item_type' => $item->item_type,
-                    'action' => $item->action
-                ));
-                
-                $errors++;
+            echo "failure\n";
+            if (!empty($message)) {
+                echo $message . "\n";
             }
         }
+    }
+
+    /**
+     * Called when a new order is created
+     *
+     * @param int $order_id Order ID
+     */
+    public function on_new_order($order_id) {
+        // Mark order as not exported
+        update_post_meta($order_id, '_wc1c_exported', '0');
+    }
+
+    /**
+     * Called when order status changes
+     *
+     * @param int $order_id Order ID
+     * @param string $old_status Old status
+     * @param string $new_status New status
+     */
+    public function on_order_status_changed($order_id, $old_status, $new_status) {
+        // Get order statuses to export
+        $statuses = get_option('wc1c_export_order_statuses', array('processing', 'completed'));
         
-        return array(
-            'processed' => $processed,
-            'errors' => $errors,
-            'total' => count($items)
-        );
-    }
-
-    /**
-     * Process individual sync queue item
-     */
-    private function process_sync_queue_item($item) {
-        $data = json_decode($item->data, true);
-        
-        switch ($item->item_type) {
-            case 'product':
-                $this->process_product_sync_item($item->item_id, $item->action, $data);
-                break;
-                
-            case 'order':
-                $this->process_order_sync_item($item->item_id, $item->action, $data);
-                break;
-                
-            case 'category':
-                $this->process_category_sync_item($item->item_id, $item->action, $data);
-                break;
-                
-            default:
-                throw new Exception("Unknown item type: {$item->item_type}");
-        }
-    }
-
-    /**
-     * Process product sync item
-     */
-    private function process_product_sync_item($product_id, $action, $data) {
-        switch ($action) {
-            case 'create':
-            case 'update':
-                // Process product update/creation
-                break;
-                
-            case 'delete':
-                // Process product deletion
-                break;
-                
-            default:
-                throw new Exception("Unknown product action: {$action}");
-        }
-    }
-
-    /**
-     * Process order sync item
-     */
-    private function process_order_sync_item($order_id, $action, $data) {
-        switch ($action) {
-            case 'export':
-                // Export order to 1C
-                break;
-                
-            case 'update_status':
-                // Update order status from 1C
-                break;
-                
-            default:
-                throw new Exception("Unknown order action: {$action}");
-        }
-    }
-
-    /**
-     * Process category sync item
-     */
-    private function process_category_sync_item($category_id, $action, $data) {
-        switch ($action) {
-            case 'create':
-            case 'update':
-                // Process category update/creation
-                break;
-                
-            case 'delete':
-                // Process category deletion
-                break;
-                
-            default:
-                throw new Exception("Unknown category action: {$action}");
+        // Check if new status is in export statuses
+        if (in_array($new_status, $statuses)) {
+            // Mark order as not exported to trigger re-export
+            update_post_meta($order_id, '_wc1c_exported', '0');
         }
     }
 }

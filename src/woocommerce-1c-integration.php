@@ -1,27 +1,28 @@
 <?php
 /**
  * Plugin Name: WooCommerce 1C Integration
- * Plugin URI: https://github.com/soft-hunter/woocommerce-1c-integration
- * Description: Enhanced data exchange between WooCommerce and 1C:Enterprise with modern architecture, security, and performance optimizations. Supports High-Performance Order Storage (HPOS).
+ * Description: Integrates WooCommerce with 1C:Enterprise accounting software.
  * Version: 1.0.0
- * Author: Igor Melnyk <melnyk.igor.k@gmail.com>
+ * Author: Igor Melnyk
+ * Requires at least: 5.2
+ * Plugin URI: https://github.com/soft-hunter/woocommerce-1c-integration
+ * Requires PHP: 7.2
  * Author URI: https://github.com/soft-hunter
- * License: GPL v3 or later
- * License URI: https://www.gnu.org/licenses/gpl-3.0.html
  * Text Domain: woocommerce-1c-integration
- * Domain Path: /
- * Requires at least: 5.0
- * Tested up to: 6.4
- * Requires PHP: 7.4
- * WC requires at least: 7.1
- * WC tested up to: 8.5
- * Network: false
+ * Domain Path: /languages
+ * License: GPL v2 or later
+ * License URI: http://www.gnu.org/licenses/gpl-2.0.txt
+ *
+ * WC requires at least: 3.0.0
+ * WC tested up to: 7.0.0
+ * WooCommerce 1C Integration
  *
  * @package WooCommerce_1C_Integration
- * @version 1.0.0
- * @author Igor Melnyk <melnyk.igor.k@gmail.com>
- * @copyright 2025 Igor Melnyk
- * @license GPL-3.0-or-later
+ * @author Igor Melnyk <igor.melnyk.it@gmail.com>
+ * @copyright 2023 Igor Melnyk
+ * @license GPL-2.0-or-later
+ *
+ * @wordpress-plugin
  */
 
 // Prevent direct access
@@ -39,13 +40,18 @@ define('WC1C_PLUGIN_DIR', plugin_dir_path(__FILE__));
 define('WC1C_PLUGIN_URL', plugin_dir_url(__FILE__));
 define('WC1C_PLUGIN_BASENAME', plugin_basename(__FILE__));
 
+// After other plugin constants, before the HPOS compatibility check
+define('WC1C_DOING_UNINSTALL', defined('WP_UNINSTALL_PLUGIN'));
+define('WC1C_UNINSTALL_LOG_FILE', WP_CONTENT_DIR . '/wc1c-uninstall.log');
+
+// Setup upload directory constant immediately to ensure it's available to all files
+$upload_dir = wp_upload_dir();
+define('WC1C_DATA_DIR', "{$upload_dir['basedir']}/woocommerce_uploads/1c-exchange/");
+
 // Declare HPOS compatibility
 add_action('before_woocommerce_init', function() {
     if (class_exists('\Automattic\WooCommerce\Utilities\FeaturesUtil')) {
-        \Automattic\WooCommerce\Utilities\FeaturesUtil::declare_compatibility('custom_order_tables',
-            __FILE__,
-            true
-        );
+        \Automattic\WooCommerce\Utilities\FeaturesUtil::declare_compatibility('custom_order_tables', __FILE__, true);
     }
 });
 
@@ -70,6 +76,8 @@ register_deactivation_hook(__FILE__, 'deactivate_wc1c');
 
 /**
  * Check system requirements
+ *
+ * @return bool Whether requirements are met
  */
 function wc1c_check_requirements() {
     $errors = array();
@@ -117,9 +125,11 @@ function wc1c_check_requirements() {
     // Display errors if any
     if (!empty($errors)) {
         add_action('admin_notices', function() use ($errors) {
+            echo '<div class="error">';
             foreach ($errors as $error) {
-                printf('<div class="error"><p>%s</p></div>', esc_html($error));
+                echo '<p>' . esc_html($error) . '</p>';
             }
+            echo '</div>';
         });
         return false;
     }
@@ -137,13 +147,50 @@ function wc1c_init_plugin() {
         return;
     }
 
+    // Create data directory if it doesn't exist
+    if (!file_exists(WC1C_DATA_DIR)) {
+        wp_mkdir_p(WC1C_DATA_DIR);
+
+        // Add index.php to prevent directory listing
+        $index_file = WC1C_DATA_DIR . 'index.php';
+        if (!file_exists($index_file)) {
+            file_put_contents($index_file, '<?php // Silence is golden');
+        }
+
+        // Add .htaccess for additional security on Apache
+        $htaccess_file = WC1C_DATA_DIR . '.htaccess';
+        if (!file_exists($htaccess_file)) {
+            file_put_contents($htaccess_file, 'Deny from all');
+        }
+    }
+
     // Load the main plugin class
     require_once WC1C_PLUGIN_DIR . 'includes/class-wc1c.php';
 
     // Initialize the plugin
     $plugin = new WC1C();
     $plugin->run();
+
+    // Register a daily maintenance action if not already scheduled
+    if (!wp_next_scheduled('wc1c_daily_maintenance')) {
+        wp_schedule_event(time(), 'daily', 'wc1c_daily_maintenance');
+    }
 }
 
 // Initialize plugin after WordPress and plugins are loaded
-add_action('plugins_loaded', 'wc1c_init_plugin');
+add_action('plugins_loaded', 'wc1c_init_plugin', 20); // Priority 20 to ensure WooCommerce is loaded first
+
+// Add uninstall hook registration
+register_uninstall_hook(__FILE__, 'wc1c_uninstall_plugin');
+
+/**
+ * Uninstall hook callback
+ */
+function wc1c_uninstall_plugin() {
+    if (!defined('WP_UNINSTALL_PLUGIN')) {
+        return;
+    }
+
+    // Your existing uninstall.php will handle the actual uninstallation
+    require_once plugin_dir_path(__FILE__) . 'uninstall.php';
+}

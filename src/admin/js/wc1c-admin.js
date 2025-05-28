@@ -1,354 +1,255 @@
 /**
  * Admin JavaScript for WooCommerce 1C Integration
+ *
+ * @package WooCommerce_1C_Integration
  */
 
 (function($) {
     'use strict';
 
-    $(document).ready(function() {
-        // Initialize admin functionality
-        WC1C_Admin.init();
-    });
+    // Document ready
+    $(function() {
+        // Copy exchange URL to clipboard
+        $('#wc1c-copy-url').on('click', function() {
+            const url = $(this).prev('code').text();
+            copyToClipboard(url);
+            
+            const button = $(this);
+            const originalText = button.text();
+            
+            button.text(wc1c_params.success_text);
+            setTimeout(function() {
+                button.text(originalText);
+            }, 2000);
+        });
 
-    var WC1C_Admin = {
-        
-        init: function() {
-            this.bindEvents();
-            this.initLogViewer();
-            this.initStatusChecker();
-            this.initSettingsForm();
-        },
-
-        bindEvents: function() {
-            // Test connection button
-            $(document).on('click', '.wc1c-test-connection', this.testConnection);
+        // Test connection button
+        $('#wc1c-test-connection').on('click', function() {
+            const button = $(this);
+            const resultContainer = $('#wc1c-connection-result');
             
-            // Clear logs button
-            $(document).on('click', '.wc1c-clear-logs', this.clearLogs);
-            
-            // Refresh status button
-            $(document).on('click', '.wc1c-refresh-status', this.refreshStatus);
-            
-            // Export settings button
-            $(document).on('click', '.wc1c-export-settings', this.exportSettings);
-            
-            // Import settings button
-            $(document).on('click', '.wc1c-import-settings', this.importSettings);
-            
-            // Copy URL button
-            $(document).on('click', '.wc1c-copy-url', this.copyUrl);
-        },
-
-        initLogViewer: function() {
-            var $logViewer = $('.wc1c-log-viewer');
-            if ($logViewer.length) {
-                // Auto-scroll to bottom
-                $logViewer.scrollTop($logViewer[0].scrollHeight);
-                
-                // Auto-refresh logs every 30 seconds
-                setInterval(function() {
-                    WC1C_Admin.refreshLogs();
-                }, 30000);
+            // Store original text
+            if (!button.data('original-text')) {
+                button.data('original-text', button.text());
             }
-        },
-
-        initStatusChecker: function() {
-            // Check status every 5 minutes
-            setInterval(function() {
-                WC1C_Admin.checkSystemStatus();
-            }, 300000);
-        },
-
-        initSettingsForm: function() {
-            var $form = $('#wc1c-settings-form');
-            if ($form.length) {
-                // Auto-save draft every 30 seconds
-                setInterval(function() {
-                    WC1C_Admin.saveDraft();
-                }, 30000);
-                
-                // Warn about unsaved changes
-                $form.on('change', 'input, select, textarea', function() {
-                    WC1C_Admin.markUnsaved();
-                });
-            }
-        },
-
-        testConnection: function(e) {
-            e.preventDefault();
             
-            var $button = $(this);
-            var originalText = $button.text();
+            // Set button to loading state
+            button.prop('disabled', true);
+            button.text(wc1c_params.loading_text);
             
-            $button.prop('disabled', true).text('Testing...');
+            // Clear previous results
+            resultContainer.removeClass('success error').empty();
             
+            // Make AJAX request
             $.ajax({
-                url: ajaxurl,
+                url: wc1c_params.ajax_url,
                 type: 'POST',
                 data: {
                     action: 'wc1c_test_connection',
-                    nonce: wc1c_admin.nonce
+                    nonce: wc1c_params.nonce
                 },
                 success: function(response) {
+                    // Reset button
+                    button.prop('disabled', false);
+                    button.text(button.data('original-text'));
+                    
                     if (response.success) {
-                        WC1C_Admin.showNotice('Connection test successful!', 'success');
+                        resultContainer.addClass('success').removeClass('error');
+                        resultContainer.html('<p><strong>' + response.data.message + '</strong></p>');
+                        
+                        if (response.data.response) {
+                            resultContainer.append('<p><strong>Response:</strong></p><pre>' + response.data.response + '</pre>');
+                        }
                     } else {
-                        WC1C_Admin.showNotice('Connection test failed: ' + response.data, 'error');
+                        resultContainer.addClass('error').removeClass('success');
+                        resultContainer.html('<p><strong>' + response.data.message + '</strong></p>');
+                        
+                        if (response.data.response) {
+                            resultContainer.append('<p><strong>Response:</strong></p><pre>' + response.data.response + '</pre>');
+                        }
                     }
                 },
                 error: function() {
-                    WC1C_Admin.showNotice('Connection test failed: Network error', 'error');
-                },
-                complete: function() {
-                    $button.prop('disabled', false).text(originalText);
+                    // Reset button
+                    button.prop('disabled', false);
+                    button.text(button.data('original-text'));
+                    
+                    // Show error
+                    resultContainer.addClass('error').removeClass('success');
+                    resultContainer.html('<p><strong>' + wc1c_params.error_text + '</strong></p><p>Request failed. Please check your server logs.</p>');
                 }
             });
-        },
+        });
 
-        clearLogs: function(e) {
-            e.preventDefault();
+        // Generate password button
+        $('#wc1c-generate-password').on('click', function() {
+            const passwordField = $('input[name="wc1c_auth_password"]');
+            const password = generatePassword(16);
+            passwordField.val(password);
+        });
+
+        // Initialize multiselect fields
+        if ($.fn.select2) {
+            $('.wc1c-multiselect').select2({
+                width: '400px'
+            });
+        }
+
+        // Tool buttons in tools page
+        $('.wc1c-tool-button').on('click', function() {
+            const button = $(this);
+            const action = button.data('action');
+            const confirmMsg = button.data('confirm');
             
-            if (!confirm('Are you sure you want to clear all logs?')) {
+            if (confirmMsg && !confirm(confirmMsg)) {
                 return;
             }
             
-            var $button = $(this);
-            var originalText = $button.text();
-            
-            $button.prop('disabled', true).text('Clearing...');
-            
-            $.ajax({
-                url: ajaxurl,
-                type: 'POST',
-                data: {
-                    action: 'wc1c_clear_logs',
-                    nonce: wc1c_admin.nonce
-                },
-                success: function(response) {
-                    if (response.success) {
-                        $('.wc1c-log-viewer').empty();
-                        WC1C_Admin.showNotice('Logs cleared successfully!', 'success');
-                    } else {
-                        WC1C_Admin.showNotice('Failed to clear logs: ' + response.data, 'error');
-                    }
-                },
-                error: function() {
-                    WC1C_Admin.showNotice('Failed to clear logs: Network error', 'error');
-                },
-                complete: function() {
-                    $button.prop('disabled', false).text(originalText);
-                }
-            });
-        },
-
-        refreshStatus: function(e) {
-            e.preventDefault();
-            
-            var $button = $(this);
-            var originalText = $button.text();
-            
-            $button.prop('disabled', true).text('Refreshing...');
-            
-            $.ajax({
-                url: ajaxurl,
-                type: 'POST',
-                data: {
-                    action: 'wc1c_get_system_status',
-                    nonce: wc1c_admin.nonce
-                },
-                success: function(response) {
-                    if (response.success) {
-                        WC1C_Admin.updateStatusDisplay(response.data);
-                        WC1C_Admin.showNotice('Status refreshed!', 'success');
-                    } else {
-                        WC1C_Admin.showNotice('Failed to refresh status: ' + response.data, 'error');
-                    }
-                },
-                error: function() {
-                    WC1C_Admin.showNotice('Failed to refresh status: Network error', 'error');
-                },
-                complete: function() {
-                    $button.prop('disabled', false).text(originalText);
-                }
-            });
-        },
-
-        refreshLogs: function() {
-            $.ajax({
-                url: ajaxurl,
-                type: 'POST',
-                data: {
-                    action: 'wc1c_get_recent_logs',
-                    nonce: wc1c_admin.nonce
-                },
-                success: function(response) {
-                    if (response.success) {
-                        var $logViewer = $('.wc1c-log-viewer');
-                        $logViewer.html(response.data.logs);
-                        $logViewer.scrollTop($logViewer[0].scrollHeight);
-                    }
-                }
-            });
-        },
-
-        checkSystemStatus: function() {
-            $.ajax({
-                url: ajaxurl,
-                type: 'POST',
-                data: {
-                    action: 'wc1c_check_system_health',
-                    nonce: wc1c_admin.nonce
-                },
-                success: function(response) {
-                    if (response.success && response.data.alerts.length > 0) {
-                        response.data.alerts.forEach(function(alert) {
-                            WC1C_Admin.showNotice(alert.message, alert.type);
-                        });
-                    }
-                }
-            });
-        },
-
-        copyUrl: function(e) {
-            e.preventDefault();
-            
-            var $button = $(this);
-            var url = $button.data('url');
-            
-            if (navigator.clipboard) {
-                navigator.clipboard.writeText(url).then(function() {
-                    WC1C_Admin.showNotice('URL copied to clipboard!', 'success');
-                });
-            } else {
-                // Fallback for older browsers
-                var $temp = $('<input>');
-                $('body').append($temp);
-                $temp.val(url).select();
-                document.execCommand('copy');
-                $temp.remove();
-                WC1C_Admin.showNotice('URL copied to clipboard!', 'success');
+            // Store original text
+            if (!button.data('original-text')) {
+                button.data('original-text', button.text());
             }
-        },
-
-        exportSettings: function(e) {
-            e.preventDefault();
             
+            // Set button to loading state
+            button.prop('disabled', true);
+            button.text(wc1c_params.loading_text);
+            
+            // Make AJAX request
             $.ajax({
-                url: ajaxurl,
+                url: wc1c_params.ajax_url,
                 type: 'POST',
                 data: {
-                    action: 'wc1c_export_settings',
-                    nonce: wc1c_admin.nonce
+                    action: action,
+                    nonce: wc1c_params.nonce
                 },
                 success: function(response) {
+                    // Reset button
+                    button.prop('disabled', false);
+                    button.text(button.data('original-text'));
+                    
                     if (response.success) {
-                        var blob = new Blob([JSON.stringify(response.data, null, 2)], {
-                            type: 'application/json'
-                        });
-                        var url = window.URL.createObjectURL(blob);
-                        var a = document.createElement('a');
-                        a.href = url;
-                        a.download = 'wc1c-settings-' + new Date().toISOString().split('T')[0] + '.json';
-                        document.body.appendChild(a);
-                        a.click();
-                        document.body.removeChild(a);
-                        window.URL.revokeObjectURL(url);
+                        alert(response.data.message);
                         
-                        WC1C_Admin.showNotice('Settings exported successfully!', 'success');
-                    } else {
-                        WC1C_Admin.showNotice('Failed to export settings: ' + response.data, 'error');
-                    }
-                }
-            });
-        },
-
-        importSettings: function(e) {
-            e.preventDefault();
-            
-            var $input = $('<input type="file" accept=".json">');
-            $input.on('change', function(e) {
-                var file = e.target.files[0];
-                if (file) {
-                    var reader = new FileReader();
-                    reader.onload = function(e) {
-                        try {
-                            var settings = JSON.parse(e.target.result);
-                            WC1C_Admin.doImportSettings(settings);
-                        } catch (error) {
-                            WC1C_Admin.showNotice('Invalid settings file format', 'error');
+                        // Reload page if needed
+                        if (response.data.reload) {
+                            window.location.reload();
                         }
-                    };
-                    reader.readAsText(file);
-                }
-            });
-            $input.click();
-        },
-
-        doImportSettings: function(settings) {
-            $.ajax({
-                url: ajaxurl,
-                type: 'POST',
-                data: {
-                    action: 'wc1c_import_settings',
-                    settings: JSON.stringify(settings),
-                    nonce: wc1c_admin.nonce
+                    } else {
+                        alert(wc1c_params.error_text + ': ' + response.data.message);
+                    }
                 },
-                success: function(response) {
-                    if (response.success) {
-                        WC1C_Admin.showNotice('Settings imported successfully! Page will reload.', 'success');
-                        setTimeout(function() {
-                            location.reload();
-                        }, 2000);
-                    } else {
-                        WC1C_Admin.showNotice('Failed to import settings: ' + response.data, 'error');
-                    }
+                error: function() {
+                    // Reset button
+                    button.prop('disabled', false);
+                    button.text(button.data('original-text'));
+                    
+                    // Show error
+                    alert(wc1c_params.error_text + ': Request failed. Please check your server logs.');
                 }
             });
-        },
+        });
+    });
 
-        saveDraft: function() {
-            var $form = $('#wc1c-settings-form');
-            if ($form.length && $form.hasClass('unsaved')) {
-                $.ajax({
-                    url: ajaxurl,
-                    type: 'POST',
-                    data: $form.serialize() + '&action=wc1c_save_draft&nonce=' + wc1c_admin.nonce,
-                    success: function(response) {
-                        if (response.success) {
-                            $form.removeClass('unsaved');
-                            $('.wc1c-draft-saved').show().delay(2000).fadeOut();
-                        }
-                    }
-                });
-            }
-        },
+    /**
+     * Copy text to clipboard
+     * 
+     * @param {string} text Text to copy
+     * @returns {boolean} Success
+     */
+    function copyToClipboard(text) {
+        // Create temporary input
+        const input = document.createElement('textarea');
+        input.value = text;
+        document.body.appendChild(input);
+        
+        // Select and copy
+        input.select();
+        const result = document.execCommand('copy');
+        
+        // Remove temporary input
+        document.body.removeChild(input);
+        
+        return result;
+    }
 
-        markUnsaved: function() {
-            $('#wc1c-settings-form').addClass('unsaved');
-            $('.wc1c-draft-saved').hide();
-        },
-
-        updateStatusDisplay: function(status) {
-            $.each(status, function(key, value) {
-                var $element = $('.wc1c-status-' + key);
-                if ($element.length) {
-                    $element.text(value);
-                }
-            });
-        },
-
-        showNotice: function(message, type) {
-            type = type || 'info';
-            
-            var $notice = $('<div class="wc1c-notice notice-' + type + '">' + message + '</div>');
-            $('.wc1c-admin-page').prepend($notice);
-            
-            setTimeout(function() {
-                $notice.fadeOut(function() {
-                    $notice.remove();
-                });
-            }, 5000);
+    /**
+     * Generate random password
+     * 
+     * @param {number} length Password length
+     * @returns {string} Generated password
+     */
+    function generatePassword(length) {
+        const charset = 'abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789!@#$%^&*()_-+=<>?';
+        let password = '';
+        
+        for (let i = 0; i < length; i++) {
+            const randomIndex = Math.floor(Math.random() * charset.length);
+            password += charset[randomIndex];
         }
-    };
-
+        
+        return password;
+    }
+    
+    /**
+     * Format date string to YYYY-MM-DD
+     * 
+     * @param {Date} date Date object
+     * @returns {string} Formatted date
+     */
+    function formatDate(date) {
+        const year = date.getFullYear();
+        const month = String(date.getMonth() + 1).padStart(2, '0');
+        const day = String(date.getDate()).padStart(2, '0');
+        
+        return `${year}-${month}-${day}`;
+    }
+    
+    /**
+     * Format date and time string to YYYY-MM-DD HH:MM:SS
+     * 
+     * @param {Date} date Date object
+     * @returns {string} Formatted date and time
+     */
+    function formatDateTime(date) {
+        const formattedDate = formatDate(date);
+        const hours = String(date.getHours()).padStart(2, '0');
+        const minutes = String(date.getMinutes()).padStart(2, '0');
+        const seconds = String(date.getSeconds()).padStart(2, '0');
+        
+        return `${formattedDate} ${hours}:${minutes}:${seconds}`;
+    }
+    
+    /**
+     * Format bytes to human-readable string
+     * 
+     * @param {number} bytes Number of bytes
+     * @param {number} decimals Number of decimal places
+     * @returns {string} Formatted size
+     */
+    function formatBytes(bytes, decimals = 2) {
+        if (bytes === 0) return '0 Bytes';
+        
+        const k = 1024;
+        const dm = decimals < 0 ? 0 : decimals;
+        const sizes = ['Bytes', 'KB', 'MB', 'GB', 'TB'];
+        
+        const i = Math.floor(Math.log(bytes) / Math.log(k));
+        
+        return parseFloat((bytes / Math.pow(k, i)).toFixed(dm)) + ' ' + sizes[i];
+    }
+    
+    /**
+     * Escape HTML
+     * 
+     * @param {string} unsafe Unsafe string
+     * @returns {string} Safe string
+     */
+    function escapeHtml(unsafe) {
+        return unsafe
+            .replace(/&/g, "&")
+            .replace(/</g, "<")
+            .replace(/>/g, ">")
+            .replace(/"/g, """)
+            .replace(/'/g, "'");
+    }
 })(jQuery);

@@ -2,8 +2,9 @@
 /**
  * Fired during plugin deactivation
  *
- * @package    WooCommerce_1C_Integration
+ * @package WooCommerce_1C_Integration
  * @subpackage WooCommerce_1C_Integration/includes
+ * @author Igor Melnyk <igor.melnyk.it@gmail.com>
  */
 
 // Prevent direct access
@@ -19,135 +20,63 @@ if (!defined('ABSPATH')) {
 class WC1C_Deactivator {
 
     /**
-     * Short Description. (use period)
-     *
-     * Long Description.
+     * Execute deactivation tasks
      */
     public static function deactivate() {
-        // Clear rewrite rules
-        flush_rewrite_rules();
-
         // Clear scheduled events
-        self::clear_scheduled_events();
-
-        // Clear transients
-        self::clear_transients();
-
+        wp_clear_scheduled_hook('wc1c_daily_maintenance');
+        
+        // Clean up database tables if plugin is being deleted
+        if (isset($_GET['action']) && $_GET['action'] === 'delete-plugin') {
+            self::cleanup_database();
+        }
+        
+        // Flush rewrite rules
+        flush_rewrite_rules();
+        
         // Log deactivation
         if (class_exists('WC1C_Logger')) {
-            WC1C_Logger::log('Plugin deactivated', WC1C_Logger::INFO);
+            WC1C_Logger::info('Plugin deactivated');
         }
     }
 
     /**
-     * Clear all scheduled events
+     * Clean up database tables and options
      */
-    private static function clear_scheduled_events() {
-        $scheduled_events = array(
-            'wc1c_cleanup_logs',
-            'wc1c_sync_check',
-            'wc1c_maintenance',
-            'wc1c_cache_cleanup'
-        );
-
-        foreach ($scheduled_events as $event) {
-            wp_clear_scheduled_hook($event);
-        }
-    }
-
-    /**
-     * Clear plugin transients
-     */
-    private static function clear_transients() {
+    private static function cleanup_database() {
         global $wpdb;
 
-        // Use prepared statement to clear transients safely
-        $wpdb->query(
-            $wpdb->prepare(
-                "DELETE FROM {$wpdb->options} 
-                 WHERE option_name LIKE %s OR option_name LIKE %s",
-                '_transient_wc1c_%',
-                '_transient_timeout_wc1c_%'
-            )
+        // Drop sync stats table
+        $table_name = $wpdb->prefix . 'wc1c_sync_stats';
+        $wpdb->query("DROP TABLE IF EXISTS {$table_name}");
+
+        // Remove plugin options
+        $options = array(
+            'wc1c_auth_enabled',
+            'wc1c_auth_method',
+            'wc1c_auth_username',
+            'wc1c_auth_password',
+            'wc1c_enable_logging',
+            'wc1c_log_level',
+            'wc1c_log_retention_days',
+            'wc1c_max_file_size',
+            'wc1c_create_categories',
+            'wc1c_update_existing',
+            'wc1c_stock_management',
+            'wc1c_disable_products',
+            'wc1c_price_type',
+            'wc1c_export_order_statuses',
+            'wc1c_export_order_date_from',
+            'wc1c_export_product_attributes'
         );
 
-        // Clear object cache
-        wp_cache_flush();
-    }
-
-    /**
-     * Remove database indexes created by the plugin
-     */
-    public static function remove_database_indexes() {
-        global $wpdb;
-
-        $index_table_names = array(
-            $wpdb->postmeta,
-            $wpdb->termmeta,
-            $wpdb->usermeta,
-        );
-
-        foreach ($index_table_names as $table_name) {
-            $index_name = 'wc1c_meta_key_meta_value';
-            
-            // Check if index exists using prepared statement
-            $index_exists = $wpdb->get_var(
-                $wpdb->prepare(
-                    "SELECT COUNT(*) FROM INFORMATION_SCHEMA.STATISTICS 
-                     WHERE table_schema = %s 
-                     AND table_name = %s 
-                     AND index_name = %s",
-                    DB_NAME,
-                    $table_name,
-                    $index_name
-                )
-            );
-
-            if ($index_exists) {
-                // Note: Index names cannot be parameterized, but we're using a fixed value
-                $wpdb->query("DROP INDEX `{$index_name}` ON `{$table_name}`");
-            }
-        }
-    }
-
-    /**
-     * Clean up plugin options
-     */
-    public static function cleanup_options() {
-        $plugin_options = array(
-            'wc1c_settings',
-            'wc1c_version',
-            'wc1c_last_exchange',
-            'wc1c_guid_attributes',
-            'wc1c_timestamp_attributes',
-            'wc1c_order_attributes',
-            'wc1c_currency'
-        );
-
-        foreach ($plugin_options as $option) {
+        foreach ($options as $option) {
             delete_option($option);
         }
-    }
 
-    /**
-     * Remove plugin capabilities
-     */
-    public static function remove_capabilities() {
-        $capabilities = array(
-            'manage_wc1c_exchange',
-            'view_wc1c_logs',
-            'configure_wc1c'
-        );
-
-        $roles = array('administrator', 'shop_manager');
-
-        foreach ($roles as $role_name) {
-            $role = get_role($role_name);
-            if ($role) {
-                foreach ($capabilities as $capability) {
-                    $role->remove_cap($capability);
-                }
-            }
+        // Log cleanup
+        if (class_exists('WC1C_Logger')) {
+            WC1C_Logger::info('Plugin database cleanup completed');
         }
     }
 }
