@@ -14,30 +14,21 @@ if (!defined('ABSPATH')) {
 
 /**
  * The admin-specific functionality of the plugin.
- *
- * Defines the plugin name, version, and hooks for admin area.
  */
 class WC1C_Admin {
 
     /**
      * The ID of this plugin.
-     *
-     * @var string $plugin_name The ID of this plugin.
      */
     private $plugin_name;
 
     /**
      * The version of this plugin.
-     *
-     * @var string $version The current version of this plugin.
      */
     private $version;
 
     /**
      * Initialize the class and set its properties.
-     *
-     * @param string $plugin_name The name of this plugin.
-     * @param string $version     The version of this plugin.
      */
     public function __construct($plugin_name, $version) {
         $this->plugin_name = $plugin_name;
@@ -46,11 +37,8 @@ class WC1C_Admin {
 
     /**
      * Register the stylesheets for the admin area.
-     *
-     * @param string $hook_suffix The current admin page.
      */
     public function enqueue_styles($hook_suffix) {
-        // Only load on our plugin pages
         if (!$this->is_plugin_page($hook_suffix)) {
             return;
         }
@@ -66,11 +54,8 @@ class WC1C_Admin {
 
     /**
      * Register the JavaScript for the admin area.
-     *
-     * @param string $hook_suffix The current admin page.
      */
     public function enqueue_scripts($hook_suffix) {
-        // Only load on our plugin pages
         if (!$this->is_plugin_page($hook_suffix)) {
             return;
         }
@@ -83,7 +68,6 @@ class WC1C_Admin {
             false
         );
 
-        // Localize script
         wp_localize_script(
             $this->plugin_name,
             'wc1c_admin',
@@ -103,8 +87,7 @@ class WC1C_Admin {
     /**
      * Add admin menu
      */
-    public function add_admin_menu() {
-        // Main menu page
+    public function add_plugin_admin_menu() {
         add_menu_page(
             __('1C Integration', 'woocommerce-1c-integration'),
             __('1C Integration', 'woocommerce-1c-integration'),
@@ -115,7 +98,6 @@ class WC1C_Admin {
             56
         );
 
-        // Dashboard submenu
         add_submenu_page(
             'wc1c-integration',
             __('Dashboard', 'woocommerce-1c-integration'),
@@ -125,7 +107,6 @@ class WC1C_Admin {
             array($this, 'display_dashboard_page')
         );
 
-        // Settings submenu
         add_submenu_page(
             'wc1c-integration',
             __('Settings', 'woocommerce-1c-integration'),
@@ -135,7 +116,6 @@ class WC1C_Admin {
             array($this, 'display_settings_page')
         );
 
-        // Logs submenu
         add_submenu_page(
             'wc1c-integration',
             __('Logs', 'woocommerce-1c-integration'),
@@ -145,7 +125,6 @@ class WC1C_Admin {
             array($this, 'display_logs_page')
         );
 
-        // Tools submenu
         add_submenu_page(
             'wc1c-integration',
             __('Tools', 'woocommerce-1c-integration'),
@@ -160,75 +139,106 @@ class WC1C_Admin {
      * Initialize admin functionality
      */
     public function admin_init() {
-        // Register settings
         $this->register_settings();
-
-        // Add admin notices
+        $this->register_ajax_handlers();
+        $this->register_column_handlers();
+        $this->handle_form_submissions();
+        
         add_action('admin_notices', array($this, 'display_admin_notices'));
-
-        // Handle AJAX requests
-        add_action('wp_ajax_wc1c_manual_sync', array($this, 'handle_manual_sync'));
-        add_action('wp_ajax_wc1c_clear_logs', array($this, 'handle_clear_logs'));
-        add_action('wp_ajax_wc1c_test_connection', array($this, 'handle_test_connection'));
-
-        // Add product columns
-        add_filter('manage_edit-product_columns', array($this, 'add_product_columns'));
-        add_action('manage_product_posts_custom_column', array($this, 'display_product_columns'), 10, 2);
-
-        // Add order columns
-        add_filter('manage_edit-shop_order_columns', array($this, 'add_order_columns'));
-        add_action('manage_shop_order_posts_custom_column', array($this, 'display_order_columns'), 10, 2);
     }
 
     /**
      * Register plugin settings
      */
     private function register_settings() {
-        register_setting('wc1c_settings', 'wc1c_enable_logging');
-        register_setting('wc1c_settings', 'wc1c_log_level');
-        register_setting('wc1c_settings', 'wc1c_max_execution_time');
-        register_setting('wc1c_settings', 'wc1c_memory_limit');
-        register_setting('wc1c_settings', 'wc1c_file_limit');
-        register_setting('wc1c_settings', 'wc1c_cleanup_garbage');
-        register_setting('wc1c_settings', 'wc1c_manage_stock');
-        register_setting('wc1c_settings', 'wc1c_outofstock_status');
-        register_setting('wc1c_settings', 'wc1c_xml_charset');
-        register_setting('wc1c_settings', 'wc1c_disable_variations');
-        register_setting('wc1c_settings', 'wc1c_prevent_clean');
-        register_setting('wc1c_settings', 'wc1c_match_by_sku');
-        register_setting('wc1c_settings', 'wc1c_match_categories_by_title');
-        register_setting('wc1c_settings', 'wc1c_match_properties_by_title');
-        register_setting('wc1c_settings', 'wc1c_sync_interval');
-        register_setting('wc1c_settings', 'wc1c_auto_sync');
-        register_setting('wc1c_settings', 'wc1c_api_timeout');
-        register_setting('wc1c_settings', 'wc1c_retry_attempts');
-        register_setting('wc1c_settings', 'wc1c_batch_size');
+        $settings = array(
+            'wc1c_enable_logging', 'wc1c_log_level', 'wc1c_max_execution_time',
+            'wc1c_memory_limit', 'wc1c_file_limit', 'wc1c_cleanup_garbage',
+            'wc1c_manage_stock', 'wc1c_outofstock_status', 'wc1c_xml_charset',
+            'wc1c_disable_variations', 'wc1c_prevent_clean', 'wc1c_match_by_sku',
+            'wc1c_match_categories_by_title', 'wc1c_match_properties_by_title',
+            'wc1c_sync_interval', 'wc1c_auto_sync', 'wc1c_api_timeout',
+            'wc1c_retry_attempts', 'wc1c_batch_size'
+        );
+
+        foreach ($settings as $setting) {
+            register_setting('wc1c_settings', $setting);
+        }
     }
 
     /**
-     * Display dashboard page
+     * Register AJAX handlers
+     */
+    private function register_ajax_handlers() {
+        $ajax_actions = array(
+            'wc1c_manual_sync', 'wc1c_clear_logs', 'wc1c_test_connection',
+            'wc1c_clear_cache', 'wc1c_validate_data', 'wc1c_export_settings'
+        );
+
+        foreach ($ajax_actions as $action) {
+            add_action('wp_ajax_' . $action, array($this, 'handle_' . str_replace('wc1c_', '', $action)));
+        }
+    }
+
+    /**
+     * Register column handlers
+     */
+    private function register_column_handlers() {
+        add_filter('manage_edit-product_columns', array($this, 'add_product_columns'));
+        add_action('manage_product_posts_custom_column', array($this, 'display_product_columns'), 10, 2);
+        add_filter('manage_edit-shop_order_columns', array($this, 'add_order_columns'));
+        add_action('manage_shop_order_posts_custom_column', array($this, 'display_order_columns'), 10, 2);
+    }
+
+    /**
+     * Handle form submissions
+     */
+    private function handle_form_submissions() {
+        if (!isset($_POST['action']) || !current_user_can('manage_woocommerce')) {
+            return;
+        }
+
+        $action = sanitize_text_field($_POST['action']);
+        
+        switch ($action) {
+            case 'reset_data':
+                if (wp_verify_nonce($_POST['wc1c_reset_data_nonce'], 'wc1c_reset_data')) {
+                    $this->handle_reset_data();
+                }
+                break;
+            case 'cleanup_data':
+                if (wp_verify_nonce($_POST['wc1c_cleanup_data_nonce'], 'wc1c_cleanup_data')) {
+                    $this->handle_cleanup_data();
+                }
+                break;
+            case 'import_settings':
+                if (wp_verify_nonce($_POST['wc1c_import_settings_nonce'], 'wc1c_import_settings')) {
+                    $this->handle_import_settings();
+                }
+                break;
+            case 'export_settings':
+                if (wp_verify_nonce($_POST['wc1c_export_settings_nonce'], 'wc1c_export_settings')) {
+                    $this->handle_export_settings();
+                }
+                break;
+        }
+    }
+
+    /**
+     * Display page methods
      */
     public function display_dashboard_page() {
         include_once WC1C_PLUGIN_DIR . 'admin/partials/wc1c-admin-dashboard.php';
     }
 
-    /**
-     * Display settings page
-     */
     public function display_settings_page() {
         include_once WC1C_PLUGIN_DIR . 'admin/partials/wc1c-admin-settings.php';
     }
 
-    /**
-     * Display logs page
-     */
     public function display_logs_page() {
         include_once WC1C_PLUGIN_DIR . 'admin/partials/wc1c-admin-logs.php';
     }
 
-    /**
-     * Display tools page
-     */
     public function display_tools_page() {
         include_once WC1C_PLUGIN_DIR . 'admin/partials/wc1c-admin-tools.php';
     }
@@ -237,7 +247,6 @@ class WC1C_Admin {
      * Display admin notices
      */
     public function display_admin_notices() {
-        // Check if WooCommerce is active
         if (!class_exists('WooCommerce')) {
             echo '<div class="error"><p>';
             echo __('WooCommerce 1C Integration requires WooCommerce to be installed and activated.', 'woocommerce-1c-integration');
@@ -245,7 +254,6 @@ class WC1C_Admin {
             return;
         }
 
-        // Check directory permissions
         $upload_dir = wp_upload_dir();
         $data_dir = $upload_dir['basedir'] . '/woocommerce-1c-integration';
         
@@ -258,7 +266,6 @@ class WC1C_Admin {
             echo '</p></div>';
         }
 
-        // Check for recent sync errors
         $recent_errors = $this->get_recent_sync_errors();
         if (!empty($recent_errors)) {
             echo '<div class="error"><p>';
@@ -272,7 +279,7 @@ class WC1C_Admin {
     }
 
     /**
-     * Handle manual sync AJAX request
+     * AJAX Handlers
      */
     public function handle_manual_sync() {
         check_ajax_referer('wc1c_admin_nonce', 'nonce');
@@ -293,15 +300,10 @@ class WC1C_Admin {
             ));
         } catch (Exception $e) {
             WC1C_Logger::log('Manual sync failed: ' . $e->getMessage(), 'error');
-            wp_send_json_error(array(
-                'message' => $e->getMessage()
-            ));
+            wp_send_json_error(array('message' => $e->getMessage()));
         }
     }
 
-    /**
-     * Handle clear logs AJAX request
-     */
     public function handle_clear_logs() {
         check_ajax_referer('wc1c_admin_nonce', 'nonce');
 
@@ -311,20 +313,14 @@ class WC1C_Admin {
 
         try {
             WC1C_Logger::cleanup_old_logs();
-            
             wp_send_json_success(array(
                 'message' => __('Logs cleared successfully', 'woocommerce-1c-integration')
             ));
         } catch (Exception $e) {
-            wp_send_json_error(array(
-                'message' => $e->getMessage()
-            ));
+            wp_send_json_error(array('message' => $e->getMessage()));
         }
     }
 
-    /**
-     * Handle test connection AJAX request
-     */
     public function handle_test_connection() {
         check_ajax_referer('wc1c_admin_nonce', 'nonce');
 
@@ -346,14 +342,277 @@ class WC1C_Admin {
                 ));
             }
         } catch (Exception $e) {
-            wp_send_json_error(array(
-                'message' => $e->getMessage()
+            wp_send_json_error(array('message' => $e->getMessage()));
+        }
+    }
+
+    public function handle_clear_cache() {
+        check_ajax_referer('wc1c_admin_nonce', 'nonce');
+
+        if (!current_user_can('manage_woocommerce')) {
+            wp_die(__('Insufficient permissions', 'woocommerce-1c-integration'));
+        }
+
+        try {
+            if (function_exists('wp_cache_flush')) {
+                wp_cache_flush();
+            }
+
+            $upload_dir = wp_upload_dir();
+            $cache_dirs = array(
+                $upload_dir['basedir'] . '/woocommerce-1c-integration/cache',
+                $upload_dir['basedir'] . '/woocommerce-1c-integration/temp'
+            );
+
+            foreach ($cache_dirs as $cache_dir) {
+                if (is_dir($cache_dir)) {
+                    $files = glob($cache_dir . '/*');
+                    foreach ($files as $file) {
+                        if (is_file($file)) {
+                            unlink($file);
+                        }
+                    }
+                }
+            }
+
+            wp_send_json_success(array(
+                'message' => __('Cache cleared successfully', 'woocommerce-1c-integration')
             ));
+        } catch (Exception $e) {
+            wp_send_json_error(array('message' => $e->getMessage()));
+        }
+    }
+
+    public function handle_validate_data() {
+        check_ajax_referer('wc1c_admin_nonce', 'nonce');
+
+        if (!current_user_can('manage_woocommerce')) {
+            wp_die(__('Insufficient permissions', 'woocommerce-1c-integration'));
+        }
+
+        try {
+            global $wpdb;
+            $issues = array();
+            
+            // Check for products without 1C GUID
+            $products_without_guid = $wpdb->get_var("
+                SELECT COUNT(p.ID) 
+                FROM {$wpdb->posts} p 
+                LEFT JOIN {$wpdb->postmeta} pm ON p.ID = pm.post_id AND pm.meta_key = '_wc1c_guid'
+                WHERE p.post_type = 'product' 
+                AND p.post_status = 'publish' 
+                AND pm.meta_value IS NULL
+            ");
+            
+            if ($products_without_guid > 0) {
+                $issues[] = sprintf(
+                    __('%d products without 1C GUID found', 'woocommerce-1c-integration'),
+                    $products_without_guid
+                );
+            }
+
+            // Check for orphaned metadata
+            $orphaned_meta = $wpdb->get_var("
+                SELECT COUNT(pm.meta_id) 
+                FROM {$wpdb->postmeta} pm
+                LEFT JOIN {$wpdb->posts} p ON pm.post_id = p.ID
+                WHERE p.ID IS NULL
+                AND pm.meta_key LIKE '_wc1c_%'
+            ");
+            
+            if ($orphaned_meta > 0) {
+                $issues[] = sprintf(
+                    __('%d orphaned metadata entries found', 'woocommerce-1c-integration'),
+                    $orphaned_meta
+                );
+            }
+
+            if (empty($issues)) {
+                wp_send_json_success(array(
+                    'message' => __('Data validation completed. No issues found.', 'woocommerce-1c-integration')
+                ));
+            } else {
+                wp_send_json_success(array(
+                    'message' => __('Data validation completed. Issues found:', 'woocommerce-1c-integration') . '<br>' . implode('<br>', $issues)
+                ));
+            }
+        } catch (Exception $e) {
+            wp_send_json_error(array('message' => $e->getMessage()));
         }
     }
 
     /**
-     * Add product columns
+     * Form submission handlers
+     */
+    private function handle_reset_data() {
+        global $wpdb;
+        
+        try {
+            // Remove all plugin options
+            $options = array(
+                'wc1c_enable_logging', 'wc1c_log_level', 'wc1c_max_execution_time',
+                'wc1c_memory_limit', 'wc1c_file_limit', 'wc1c_cleanup_garbage',
+                'wc1c_manage_stock', 'wc1c_outofstock_status', 'wc1c_xml_charset',
+                'wc1c_disable_variations', 'wc1c_prevent_clean', 'wc1c_match_by_sku',
+                'wc1c_match_categories_by_title', 'wc1c_match_properties_by_title',
+                'wc1c_sync_interval', 'wc1c_auto_sync', 'wc1c_api_timeout',
+                'wc1c_retry_attempts', 'wc1c_batch_size'
+            );
+
+            foreach ($options as $option) {
+                delete_option($option);
+            }
+
+            // Remove plugin metadata
+            $wpdb->query("DELETE FROM {$wpdb->postmeta} WHERE meta_key LIKE '_wc1c_%'");
+            $wpdb->query("DELETE FROM {$wpdb->termmeta} WHERE meta_key LIKE '_wc1c_%'");
+
+            // Clear logs
+            WC1C_Logger::cleanup_old_logs();
+
+            // Clear files
+            $upload_dir = wp_upload_dir();
+            $plugin_dir = $upload_dir['basedir'] . '/woocommerce-1c-integration';
+            
+            if (is_dir($plugin_dir)) {
+                $this->recursive_rmdir($plugin_dir);
+            }
+
+            add_action('admin_notices', function() {
+                echo '<div class="notice notice-success is-dismissible"><p>';
+                echo __('All plugin data has been reset successfully.', 'woocommerce-1c-integration');
+                echo '</p></div>';
+            });
+
+        } catch (Exception $e) {
+            add_action('admin_notices', function() use ($e) {
+                echo '<div class="notice notice-error is-dismissible"><p>';
+                echo sprintf(__('Error resetting data: %s', 'woocommerce-1c-integration'), $e->getMessage());
+                echo '</p></div>';
+            });
+        }
+    }
+
+    private function handle_cleanup_data() {
+        global $wpdb;
+        
+        try {
+            // Remove orphaned metadata
+            $wpdb->query("
+                DELETE pm FROM {$wpdb->postmeta} pm
+                LEFT JOIN {$wpdb->posts} p ON pm.post_id = p.ID
+                WHERE p.ID IS NULL AND pm.meta_key LIKE '_wc1c_%'
+            ");
+
+            $wpdb->query("
+                DELETE tm FROM {$wpdb->termmeta} tm
+                LEFT JOIN {$wpdb->terms} t ON tm.term_id = t.term_id
+                WHERE t.term_id IS NULL AND tm.meta_key LIKE '_wc1c_%'
+            ");
+
+            // Clean old files
+            $upload_dir = wp_upload_dir();
+            $temp_dir = $upload_dir['basedir'] . '/woocommerce-1c-integration/temp';
+            
+            if (is_dir($temp_dir)) {
+                $files = glob($temp_dir . '/*');
+                foreach ($files as $file) {
+                    if (is_file($file) && filemtime($file) < (time() - 86400)) {
+                        unlink($file);
+                    }
+                }
+            }
+
+            add_action('admin_notices', function() {
+                echo '<div class="notice notice-success is-dismissible"><p>';
+                echo __('Orphaned data cleaned up successfully.', 'woocommerce-1c-integration');
+                echo '</p></div>';
+            });
+
+        } catch (Exception $e) {
+            add_action('admin_notices', function() use ($e) {
+                echo '<div class="notice notice-error is-dismissible"><p>';
+                echo sprintf(__('Error cleaning up data: %s', 'woocommerce-1c-integration'), $e->getMessage());
+                echo '</p></div>';
+            });
+        }
+    }
+
+    public function handle_export_settings() {
+        $settings = array();
+        $options = array(
+            'wc1c_enable_logging', 'wc1c_log_level', 'wc1c_max_execution_time',
+            'wc1c_memory_limit', 'wc1c_file_limit', 'wc1c_cleanup_garbage',
+            'wc1c_manage_stock', 'wc1c_outofstock_status', 'wc1c_xml_charset',
+            'wc1c_disable_variations', 'wc1c_prevent_clean', 'wc1c_match_by_sku',
+            'wc1c_match_categories_by_title', 'wc1c_match_properties_by_title',
+            'wc1c_sync_interval', 'wc1c_auto_sync', 'wc1c_api_timeout',
+            'wc1c_retry_attempts', 'wc1c_batch_size'
+        );
+
+        foreach ($options as $option) {
+            $settings[$option] = get_option($option);
+        }
+
+        $export_data = array(
+            'version' => WC1C_VERSION,
+            'timestamp' => current_time('mysql'),
+            'settings' => $settings
+        );
+
+        $filename = 'wc1c-settings-' . date('Y-m-d-H-i-s') . '.json';
+        
+        header('Content-Type: application/json');
+        header('Content-Disposition: attachment; filename="' . $filename . '"');
+        header('Content-Length: ' . strlen(json_encode($export_data)));
+        
+        echo json_encode($export_data, JSON_PRETTY_PRINT);
+        exit;
+    }
+
+    private function handle_import_settings() {
+        if (!isset($_FILES['settings_file']) || $_FILES['settings_file']['error'] !== UPLOAD_ERR_OK) {
+            add_action('admin_notices', function() {
+                echo '<div class="notice notice-error is-dismissible"><p>';
+                echo __('Error uploading settings file.', 'woocommerce-1c-integration');
+                echo '</p></div>';
+            });
+            return;
+        }
+
+        try {
+            $file_content = file_get_contents($_FILES['settings_file']['tmp_name']);
+            $import_data = json_decode($file_content, true);
+
+            if (json_last_error() !== JSON_ERROR_NONE) {
+                throw new Exception(__('Invalid JSON file.', 'woocommerce-1c-integration'));
+            }
+
+            if (!isset($import_data['settings']) || !is_array($import_data['settings'])) {
+                throw new Exception(__('Invalid settings file format.', 'woocommerce-1c-integration'));
+            }
+
+            foreach ($import_data['settings'] as $option => $value) {
+                update_option($option, $value);
+            }
+
+            add_action('admin_notices', function() {
+                echo '<div class="notice notice-success is-dismissible"><p>';
+                echo __('Settings imported successfully.', 'woocommerce-1c-integration');
+                echo '</p></div>';
+            });
+
+        } catch (Exception $e) {
+            add_action('admin_notices', function() use ($e) {
+                echo '<div class="notice notice-error is-dismissible"><p>';
+                echo sprintf(__('Error importing settings: %s', 'woocommerce-1c-integration'), $e->getMessage());
+                echo '</p></div>';
+            });
+        }
+    }
+
+    /**
+     * Product and Order Column Management
      */
     public function add_product_columns($columns) {
         $new_columns = array();
@@ -370,9 +629,6 @@ class WC1C_Admin {
         return $new_columns;
     }
 
-    /**
-     * Display product columns
-     */
     public function display_product_columns($column, $post_id) {
         switch ($column) {
             case 'wc1c_guid':
@@ -391,9 +647,6 @@ class WC1C_Admin {
         }
     }
 
-    /**
-     * Add order columns
-     */
     public function add_order_columns($columns) {
         $new_columns = array();
         
@@ -408,9 +661,6 @@ class WC1C_Admin {
         return $new_columns;
     }
 
-    /**
-     * Display order columns
-     */
     public function display_order_columns($column, $post_id) {
         switch ($column) {
             case 'wc1c_sync_status':
@@ -432,7 +682,7 @@ class WC1C_Admin {
     }
 
     /**
-     * Check if current page is a plugin page
+     * Utility methods
      */
     private function is_plugin_page($hook_suffix) {
         $plugin_pages = array(
@@ -445,13 +695,14 @@ class WC1C_Admin {
         return in_array($hook_suffix, $plugin_pages);
     }
 
-    /**
-     * Get recent sync errors
-     */
     private function get_recent_sync_errors() {
         global $wpdb;
         
         $table_name = $wpdb->prefix . 'wc1c_exchange_logs';
+        
+        if ($wpdb->get_var("SHOW TABLES LIKE '{$table_name}'") !== $table_name) {
+            return array();
+        }
         
         return $wpdb->get_results($wpdb->prepare(
             "SELECT * FROM {$table_name} 
@@ -462,20 +713,122 @@ class WC1C_Admin {
         ));
     }
 
+    private function recursive_rmdir($dir) {
+        if (!is_dir($dir)) {
+            return;
+        }
+
+        $files = array_diff(scandir($dir), array('.', '..'));
+        
+        foreach ($files as $file) {
+            $path = $dir . DIRECTORY_SEPARATOR . $file;
+            is_dir($path) ? $this->recursive_rmdir($path) : unlink($path);
+        }
+        
+        rmdir($dir);
+    }
+
     /**
-     * Display HPOS status in system information
+     * Get sync statistics for dashboard
      */
-    private function get_hpos_status() {
-        $status = array();
+    public function get_sync_statistics() {
+        global $wpdb;
+        
+        $stats = array(
+            'total_products' => 0,
+            'synced_products' => 0,
+            'total_orders' => 0,
+            'synced_orders' => 0,
+            'last_sync' => null,
+            'sync_errors' => 0
+        );
+
+        // Get product stats
+        $stats['total_products'] = $wpdb->get_var("
+            SELECT COUNT(*) FROM {$wpdb->posts} 
+            WHERE post_type = 'product' AND post_status = 'publish'
+        ");
+
+        $stats['synced_products'] = $wpdb->get_var("
+            SELECT COUNT(DISTINCT p.ID) FROM {$wpdb->posts} p
+            INNER JOIN {$wpdb->postmeta} pm ON p.ID = pm.post_id
+            WHERE p.post_type = 'product' 
+            AND p.post_status = 'publish'
+            AND pm.meta_key = '_wc1c_guid'
+            AND pm.meta_value != ''
+        ");
+
+        // Get order stats
+        $stats['total_orders'] = $wpdb->get_var("
+            SELECT COUNT(*) FROM {$wpdb->posts} 
+            WHERE post_type = 'shop_order'
+        ");
+
+        $stats['synced_orders'] = $wpdb->get_var("
+            SELECT COUNT(DISTINCT p.ID) FROM {$wpdb->posts} p
+            INNER JOIN {$wpdb->postmeta} pm ON p.ID = pm.post_id
+            WHERE p.post_type = 'shop_order'
+            AND pm.meta_key = '_wc1c_sync_status'
+            AND pm.meta_value = 'synced'
+        ");
+
+        // Get last sync time
+        $last_sync = $wpdb->get_var("
+            SELECT MAX(meta_value) FROM {$wpdb->postmeta}
+            WHERE meta_key = '_wc1c_last_sync'
+        ");
+
+        if ($last_sync) {
+            $stats['last_sync'] = $last_sync;
+        }
+
+        // Get recent errors
+        $table_name = $wpdb->prefix . 'wc1c_exchange_logs';
+        if ($wpdb->get_var("SHOW TABLES LIKE '{$table_name}'") === $table_name) {
+            $stats['sync_errors'] = $wpdb->get_var($wpdb->prepare(
+                "SELECT COUNT(*) FROM {$table_name} 
+                 WHERE status IN ('error', 'critical') 
+                 AND created_at > DATE_SUB(NOW(), INTERVAL 7 DAY)"
+            ));
+        }
+
+        return $stats;
+    }
+
+    /**
+     * Get recent logs for dashboard
+     */
+    public function get_recent_logs($limit = 10) {
+        global $wpdb;
+        
+        $table_name = $wpdb->prefix . 'wc1c_exchange_logs';
+        
+        if ($wpdb->get_var("SHOW TABLES LIKE '{$table_name}'") !== $table_name) {
+            return array();
+        }
+        
+        return $wpdb->get_results($wpdb->prepare(
+            "SELECT * FROM {$table_name} 
+             ORDER BY created_at DESC 
+             LIMIT %d",
+            $limit
+        ));
+    }
+
+    /**
+     * Get HPOS status for system information
+     */
+    public function get_hpos_status() {
+        $status = array(
+            'hpos_available' => false,
+            'hpos_enabled' => false,
+            'hpos_sync_enabled' => false
+        );
         
         if (class_exists('\Automattic\WooCommerce\Utilities\OrderUtil')) {
             $status['hpos_available'] = true;
             $status['hpos_enabled'] = \Automattic\WooCommerce\Utilities\OrderUtil::custom_orders_table_usage_is_enabled();
             $status['hpos_sync_enabled'] = \Automattic\WooCommerce\Utilities\OrderUtil::is_custom_order_tables_in_sync();
-        } else {
-            $status['hpos_available'] = false;
-            $status['hpos_enabled'] = false;
-            $status['hpos_sync_enabled'] = false;
         }
         
         return $status;
@@ -495,6 +848,22 @@ class WC1C_Admin {
             <tr>
                 <td><?php _e('WooCommerce Version', 'woocommerce-1c-integration'); ?></td>
                 <td><?php echo defined('WC_VERSION') ? WC_VERSION : 'Not installed'; ?></td>
+            </tr>
+            <tr>
+                <td><?php _e('WordPress Version', 'woocommerce-1c-integration'); ?></td>
+                <td><?php echo get_bloginfo('version'); ?></td>
+            </tr>
+            <tr>
+                <td><?php _e('PHP Version', 'woocommerce-1c-integration'); ?></td>
+                <td><?php echo PHP_VERSION; ?></td>
+            </tr>
+            <tr>
+                <td><?php _e('Memory Limit', 'woocommerce-1c-integration'); ?></td>
+                <td><?php echo ini_get('memory_limit'); ?></td>
+            </tr>
+            <tr>
+                <td><?php _e('Max Execution Time', 'woocommerce-1c-integration'); ?></td>
+                <td><?php echo ini_get('max_execution_time'); ?> seconds</td>
             </tr>
             <tr>
                 <td><?php _e('HPOS Available', 'woocommerce-1c-integration'); ?></td>

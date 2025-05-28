@@ -2,9 +2,9 @@
 /**
  * Fired during plugin activation
  *
- * @package    WooCommerce_1C_Integration
+ * @package WooCommerce_1C_Integration
  * @subpackage WooCommerce_1C_Integration/includes
- * @author     Igor Melnyk <igormelnykit@gmail.com>
+ * @author Igor Melnyk <igormelnykit@gmail.com>
  */
 
 // Prevent direct access
@@ -26,7 +26,7 @@ class WC1C_Activator {
      */
     public static function activate() {
         // Log activation
-        WC1C_Logger::log('Plugin activation started', 'info');
+        error_log('WC1C: Plugin activation started');
 
         // Create database tables
         self::create_database_tables();
@@ -54,7 +54,7 @@ class WC1C_Activator {
         // Flush rewrite rules
         flush_rewrite_rules();
 
-        WC1C_Logger::log('Plugin activation completed', 'info');
+        error_log('WC1C: Plugin activation completed');
     }
 
     /**
@@ -127,7 +127,7 @@ class WC1C_Activator {
         require_once(ABSPATH . 'wp-admin/includes/upgrade.php');
         dbDelta($sql);
 
-        WC1C_Logger::log('Database tables created', 'info');
+        error_log('WC1C: Database tables created');
     }
 
     /**
@@ -157,9 +157,9 @@ class WC1C_Activator {
                 $wpdb->query("ALTER TABLE `{$table_name}` ADD INDEX `{$index_name}` (meta_key, meta_value(36))");
                 
                 if ($wpdb->last_error) {
-                    WC1C_Logger::log("Failed to create index on {$table_name}: " . $wpdb->last_error, 'error');
+                    error_log("WC1C: Failed to create index on {$table_name}: " . $wpdb->last_error);
                 } else {
-                    WC1C_Logger::log("Created index on {$table_name}", 'info');
+                    error_log("WC1C: Created index on {$table_name}");
                 }
             }
         }
@@ -185,7 +185,7 @@ class WC1C_Activator {
 
         foreach ($directories as $dir) {
             if (!wp_mkdir_p($dir)) {
-                WC1C_Logger::log("Failed to create directory: {$dir}", 'error');
+                error_log("WC1C: Failed to create directory: {$dir}");
                 continue;
             }
 
@@ -197,14 +197,14 @@ class WC1C_Activator {
 
             // Add .htaccess for data directories
             if (!in_array(basename($dir), array('logs', 'temp', 'backup'))) {
-                $htaccess_content = "Deny from all\n<Files \"*.xml\">\n  Allow from all\n</Files>";
+                $htaccess_content = "Deny from all\n<Files \"*.xml\">\n Allow from all\n</Files>";
                 file_put_contents($dir . '/.htaccess', $htaccess_content);
             } else {
                 // Logs and temp directories should be completely protected
                 file_put_contents($dir . '/.htaccess', 'Deny from all');
             }
 
-            WC1C_Logger::log("Created directory: {$dir}", 'info');
+            error_log("WC1C: Created directory: {$dir}");
         }
     }
 
@@ -242,7 +242,7 @@ class WC1C_Activator {
             }
         }
 
-        WC1C_Logger::log('Default options set', 'info');
+        error_log('WC1C: Default options set');
     }
 
     /**
@@ -268,7 +268,7 @@ class WC1C_Activator {
         $wp->add_query_var('wc1c_action');
         $wp->add_query_var('wc1c_endpoint');
 
-        WC1C_Logger::log('Rewrite rules added', 'info');
+        error_log('WC1C: Rewrite rules added');
     }
 
     /**
@@ -293,7 +293,7 @@ class WC1C_Activator {
             wp_schedule_event(time(), $sync_interval, 'wc1c_auto_sync');
         }
 
-        WC1C_Logger::log('Cron jobs scheduled', 'info');
+        error_log('WC1C: Cron jobs scheduled');
     }
 
     /**
@@ -304,12 +304,12 @@ class WC1C_Activator {
     public static function add_cron_intervals($schedules) {
         $schedules['wc1c_every_5_minutes'] = array(
             'interval' => 300,
-            'display'  => __('Every 5 Minutes', 'woocommerce-1c-integration')
+            'display' => __('Every 5 Minutes', 'woocommerce-1c-integration')
         );
 
         $schedules['wc1c_every_15_minutes'] = array(
             'interval' => 900,
-            'display'  => __('Every 15 Minutes', 'woocommerce-1c-integration')
+            'display' => __('Every 15 Minutes', 'woocommerce-1c-integration')
         );
 
         return $schedules;

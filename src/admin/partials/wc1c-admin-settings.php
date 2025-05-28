@@ -1,9 +1,10 @@
 <?php
 /**
- * Settings page template
+ * Provide a admin area view for the plugin settings
  *
  * @package    WooCommerce_1C_Integration
  * @subpackage WooCommerce_1C_Integration/admin/partials
+ * @author     Igor Melnyk <igormelnykit@gmail.com>
  */
 
 // Prevent direct access
@@ -12,29 +13,28 @@ if (!defined('ABSPATH')) {
 }
 ?>
 
-<div class="wrap wc1c-admin-page">
+<div class="wrap">
     <h1><?php echo esc_html(get_admin_page_title()); ?></h1>
     
-    <?php settings_errors(); ?>
-    
-    <form method="post" action="options.php" id="wc1c-settings-form">
+    <form method="post" action="options.php">
         <?php
         settings_fields('wc1c_settings');
         do_settings_sections('wc1c_settings');
         ?>
         
-        <div class="wc1c-settings-section">
-            <h3><?php _e('General Settings', 'woocommerce-1c-integration'); ?></h3>
-            <table class="wc1c-form-table">
+        <table class="form-table">
+            <tbody>
+                <!-- General Settings -->
                 <tr>
                     <th scope="row">
                         <label for="wc1c_enable_logging"><?php _e('Enable Logging', 'woocommerce-1c-integration'); ?></label>
                     </th>
                     <td>
                         <input type="checkbox" id="wc1c_enable_logging" name="wc1c_enable_logging" value="1" <?php checked(get_option('wc1c_enable_logging', 1)); ?> />
-                        <p class="wc1c-help-text"><?php _e('Enable detailed logging of exchange operations.', 'woocommerce-1c-integration'); ?></p>
+                        <p class="description"><?php _e('Enable detailed logging for debugging purposes.', 'woocommerce-1c-integration'); ?></p>
                     </td>
                 </tr>
+                
                 <tr>
                     <th scope="row">
                         <label for="wc1c_log_level"><?php _e('Log Level', 'woocommerce-1c-integration'); ?></label>
@@ -46,91 +46,78 @@ if (!defined('ABSPATH')) {
                             <option value="warning" <?php selected(get_option('wc1c_log_level', 'info'), 'warning'); ?>><?php _e('Warning', 'woocommerce-1c-integration'); ?></option>
                             <option value="error" <?php selected(get_option('wc1c_log_level', 'info'), 'error'); ?>><?php _e('Error', 'woocommerce-1c-integration'); ?></option>
                         </select>
-                        <p class="wc1c-help-text"><?php _e('Minimum log level to record.', 'woocommerce-1c-integration'); ?></p>
                     </td>
                 </tr>
-            </table>
-        </div>
-
-        <div class="wc1c-settings-section">
-            <h3><?php _e('Exchange Settings', 'woocommerce-1c-integration'); ?></h3>
-            <table class="wc1c-form-table">
+                
+                <!-- Performance Settings -->
                 <tr>
                     <th scope="row">
                         <label for="wc1c_max_execution_time"><?php _e('Max Execution Time', 'woocommerce-1c-integration'); ?></label>
                     </th>
                     <td>
                         <input type="number" id="wc1c_max_execution_time" name="wc1c_max_execution_time" value="<?php echo esc_attr(get_option('wc1c_max_execution_time', 300)); ?>" min="60" max="3600" />
-                        <p class="wc1c-help-text"><?php _e('Maximum execution time for exchange operations (seconds).', 'woocommerce-1c-integration'); ?></p>
+                        <p class="description"><?php _e('Maximum execution time in seconds for synchronization operations.', 'woocommerce-1c-integration'); ?></p>
                     </td>
                 </tr>
+                
                 <tr>
                     <th scope="row">
                         <label for="wc1c_memory_limit"><?php _e('Memory Limit', 'woocommerce-1c-integration'); ?></label>
                     </th>
                     <td>
-                        <input type="text" id="wc1c_memory_limit" name="wc1c_memory_limit" value="<?php echo esc_attr(get_option('wc1c_memory_limit', '512M')); ?>" />
-                        <p class="wc1c-help-text"><?php _e('Memory limit for exchange operations (e.g., 512M, 1G).', 'woocommerce-1c-integration'); ?></p>
+                        <input type="text" id="wc1c_memory_limit" name="wc1c_memory_limit" value="<?php echo esc_attr(get_option('wc1c_memory_limit', '256M')); ?>" />
+                        <p class="description"><?php _e('Memory limit for synchronization operations (e.g., 256M, 512M).', 'woocommerce-1c-integration'); ?></p>
                     </td>
                 </tr>
+                
+                <!-- Synchronization Settings -->
                 <tr>
                     <th scope="row">
-                        <label for="wc1c_file_limit"><?php _e('File Size Limit', 'woocommerce-1c-integration'); ?></label>
+                        <label for="wc1c_auto_sync"><?php _e('Auto Sync', 'woocommerce-1c-integration'); ?></label>
                     </th>
                     <td>
-                        <input type="text" id="wc1c_file_limit" name="wc1c_file_limit" value="<?php echo esc_attr(get_option('wc1c_file_limit', '100M')); ?>" />
-                        <p class="wc1c-help-text"><?php _e('Maximum file size for uploads (e.g., 100M, 1G).', 'woocommerce-1c-integration'); ?></p>
+                        <input type="checkbox" id="wc1c_auto_sync" name="wc1c_auto_sync" value="1" <?php checked(get_option('wc1c_auto_sync', 0)); ?> />
+                        <p class="description"><?php _e('Enable automatic synchronization based on schedule.', 'woocommerce-1c-integration'); ?></p>
                     </td>
                 </tr>
-            </table>
-        </div>
-
-        <div class="wc1c-settings-section">
-            <h3><?php _e('Security Settings', 'woocommerce-1c-integration'); ?></h3>
-            <table class="wc1c-form-table">
+                
                 <tr>
                     <th scope="row">
-                        <label for="wc1c_rate_limit"><?php _e('Rate Limit', 'woocommerce-1c-integration'); ?></label>
+                        <label for="wc1c_sync_interval"><?php _e('Sync Interval', 'woocommerce-1c-integration'); ?></label>
                     </th>
                     <td>
-                        <input type="number" id="wc1c_rate_limit" name="wc1c_rate_limit" value="<?php echo esc_attr(get_option('wc1c_rate_limit', 60)); ?>" min="1" max="1000" />
-                        <p class="wc1c-help-text"><?php _e('Maximum requests per hour from single IP.', 'woocommerce-1c-integration'); ?></p>
+                        <select id="wc1c_sync_interval" name="wc1c_sync_interval">
+                            <option value="hourly" <?php selected(get_option('wc1c_sync_interval', 'daily'), 'hourly'); ?>><?php _e('Hourly', 'woocommerce-1c-integration'); ?></option>
+                            <option value="twicedaily" <?php selected(get_option('wc1c_sync_interval', 'daily'), 'twicedaily'); ?>><?php _e('Twice Daily', 'woocommerce-1c-integration'); ?></option>
+                            <option value="daily" <?php selected(get_option('wc1c_sync_interval', 'daily'), 'daily'); ?>><?php _e('Daily', 'woocommerce-1c-integration'); ?></option>
+                            <option value="weekly" <?php selected(get_option('wc1c_sync_interval', 'daily'), 'weekly'); ?>><?php _e('Weekly', 'woocommerce-1c-integration'); ?></option>
+                        </select>
                     </td>
                 </tr>
+                
+                <!-- Product Settings -->
                 <tr>
                     <th scope="row">
-                        <label for="wc1c_enable_ip_whitelist"><?php _e('Enable IP Whitelist', 'woocommerce-1c-integration'); ?></label>
+                        <label for="wc1c_manage_stock"><?php _e('Manage Stock', 'woocommerce-1c-integration'); ?></label>
                     </th>
                     <td>
-                        <input type="checkbox" id="wc1c_enable_ip_whitelist" name="wc1c_enable_ip_whitelist" value="1" <?php checked(get_option('wc1c_enable_ip_whitelist', 0)); ?> />
-                        <p class="wc1c-help-text"><?php _e('Only allow connections from whitelisted IP addresses.', 'woocommerce-1c-integration'); ?></p>
+                        <input type="checkbox" id="wc1c_manage_stock" name="wc1c_manage_stock" value="1" <?php checked(get_option('wc1c_manage_stock', 1)); ?> />
+                        <p class="description"><?php _e('Enable stock management for synchronized products.', 'woocommerce-1c-integration'); ?></p>
                     </td>
                 </tr>
+                
                 <tr>
                     <th scope="row">
-                        <label for="wc1c_ip_whitelist"><?php _e('IP Whitelist', 'woocommerce-1c-integration'); ?></label>
+                        <label for="wc1c_match_by_sku"><?php _e('Match by SKU', 'woocommerce-1c-integration'); ?></label>
                     </th>
                     <td>
-                        <textarea id="wc1c_ip_whitelist" name="wc1c_ip_whitelist" placeholder="192.168.1.1
-10.0.0.0/8"><?php echo esc_textarea(get_option('wc1c_ip_whitelist', '')); ?></textarea>
-                        <p class="wc1c-help-text"><?php _e('One IP address or CIDR range per line.', 'woocommerce-1c-integration'); ?></p>
+                        <input type="checkbox" id="wc1c_match_by_sku" name="wc1c_match_by_sku" value="1" <?php checked(get_option('wc1c_match_by_sku', 1)); ?> />
+                        <p class="description"><?php _e('Match products by SKU instead of GUID when possible.', 'woocommerce-1c-integration'); ?></p>
                     </td>
                 </tr>
-            </table>
-        </div>
-
-        <div class="wc1c-button-group">
-            <?php submit_button(__('Save Settings', 'woocommerce-1c-integration'), 'primary', 'submit', false); ?>
-            <button type="button" class="button button-secondary wc1c-export-settings">
-                <?php _e('Export Settings', 'woocommerce-1c-integration'); ?>
-            </button>
-            <button type="button" class="button button-secondary wc1c-import-settings">
-                <?php _e('Import Settings', 'woocommerce-1c-integration'); ?>
-            </button>
-        </div>
+            </tbody>
+        </table>
         
-        <div class="wc1c-draft-saved" style="display: none;">
-            <em><?php _e('Draft saved automatically', 'woocommerce-1c-integration'); ?></em>
-        </div>
+        <?php submit_button(); ?>
     </form>
 </div>
