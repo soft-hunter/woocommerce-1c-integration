@@ -124,6 +124,14 @@ class WC1C_Admin
                 'menu_slug' => 'wc1c-integration',
                 'function' => array($this, 'display_dashboard_page')
             ),
+            'display' => array(
+                'parent' => 'wc1c-integration',
+                'title' => __('Display', 'woocommerce-1c-integration'),
+                'menu_title' => __('Display', 'woocommerce-1c-integration'),
+                'capability' => 'manage_woocommerce',
+                'menu_slug' => 'wc1c-display',
+                'function' => array($this, 'display_display_page')
+            ),
             'settings' => array(
                 'parent' => 'wc1c-integration',
                 'title' => __('Settings', 'woocommerce-1c-integration'),
@@ -267,6 +275,16 @@ class WC1C_Admin
         include(WC1C_PLUGIN_DIR . 'admin/partials/wc1c-admin-dashboard.php');
     }
 
+    /**
+     * Display display page.
+     */
+    public function display_display_page()
+    {
+        // Check if tab is set
+        $tab = isset($_GET['tab']) ? sanitize_text_field($_GET['tab']) : 'general';
+        // Include view file
+        include(WC1C_PLUGIN_DIR . 'admin/partials/wc1c-admin-display.php');
+    }
     /**
      * Display settings page.
      */
@@ -569,7 +587,7 @@ class WC1C_Admin
 
             <?php submit_button(); ?>
         </form>
-<?php
+    <?php
     }
 
     /**
@@ -788,21 +806,22 @@ class WC1C_Admin
      *
      * @return array Array of recent sync records
      */
-    public function get_recent_sync_stats() {
+    public function get_recent_sync_stats()
+    {
         global $wpdb;
-        
+
         $table_name = $wpdb->prefix . 'wc1c_sync_stats';
-        
+
         // Create table if not exists
         $this->create_sync_stats_table();
-        
+
         // Get last 10 sync records
         $results = $wpdb->get_results(
             "SELECT * FROM {$table_name} 
             ORDER BY created_at DESC 
             LIMIT 10"
         );
-        
+
         return $results ? $results : array();
     }
 
@@ -811,7 +830,8 @@ class WC1C_Admin
      *
      * @return array System status data
      */
-    public function get_system_status() {
+    public function get_system_status()
+    {
         return array(
             'wp_version' => get_bloginfo('version'),
             'wc_version' => WC()->version,
@@ -833,9 +853,10 @@ class WC1C_Admin
     /**
      * Create sync stats table if not exists
      */
-    private function create_sync_stats_table() {
+    private function create_sync_stats_table()
+    {
         global $wpdb;
-        
+
         $table_name = $wpdb->prefix . 'wc1c_sync_stats';
         $charset_collate = $wpdb->get_charset_collate();
 
@@ -856,9 +877,10 @@ class WC1C_Admin
     /**
      * Display system status information
      */
-    public function display_system_status() {
+    public function display_system_status()
+    {
         $status = $this->get_system_status();
-        ?>
+    ?>
         <table class="wc1c-status-table widefat">
             <tbody>
                 <tr>
@@ -883,6 +905,6 @@ class WC1C_Admin
                 </tr>
             </tbody>
         </table>
-        <?php
+<?php
     }
 }
