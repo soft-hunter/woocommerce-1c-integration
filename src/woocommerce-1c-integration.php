@@ -71,8 +71,19 @@ function deactivate_wc1c() {
     WC1C_Deactivator::deactivate();
 }
 
+/**
+ * The code that runs during plugin uninstall.
+ */
+function uninstall_wc1c() {
+    if (!defined('WP_UNINSTALL_PLUGIN')) {
+        return;
+    }
+    require_once WC1C_PLUGIN_DIR . 'includes/class-wc1c-uninstall.php';
+}
+
 register_activation_hook(__FILE__, 'activate_wc1c');
 register_deactivation_hook(__FILE__, 'deactivate_wc1c');
+register_uninstall_hook(__FILE__, 'uninstall_wc1c');
 
 /**
  * Check system requirements
@@ -179,18 +190,3 @@ function wc1c_init_plugin() {
 
 // Initialize plugin after WordPress and plugins are loaded
 add_action('plugins_loaded', 'wc1c_init_plugin', 20); // Priority 20 to ensure WooCommerce is loaded first
-
-// Add uninstall hook registration
-register_uninstall_hook(__FILE__, 'wc1c_uninstall_plugin');
-
-/**
- * Uninstall hook callback
- */
-function wc1c_uninstall_plugin() {
-    if (!defined('WP_UNINSTALL_PLUGIN')) {
-        return;
-    }
-
-    // Your existing uninstall.php will handle the actual uninstallation
-    require_once plugin_dir_path(__FILE__) . 'uninstall.php';
-}
