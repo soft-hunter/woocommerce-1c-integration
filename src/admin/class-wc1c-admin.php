@@ -109,7 +109,7 @@ class WC1C_Admin
             __('1C Integration', 'woocommerce-1c-integration'),
             'manage_woocommerce',
             'wc1c-integration',
-            array($this, 'display_dashboard_page'),
+            array($this, 'display_general_settings'),
             'dashicons-update',
             56
         );
@@ -177,7 +177,6 @@ class WC1C_Admin
             );
         }
     }
-
 
 
 
@@ -398,12 +397,17 @@ class WC1C_Admin
                 <tr>
                     <th scope="row"><?php _e('Password', 'woocommerce-1c-integration'); ?></th>
                     <td>
-                        <input type="password" name="wc1c_auth_password" value="<?php echo esc_attr($auth_password); ?>" class="regular-text" />
+                        <input type="password" name="wc1c_auth_password" id="wc1c_auth_password_field" value="<?php echo esc_attr($auth_password); ?>" class="regular-text" />
                         <button type="button" class="button" id="wc1c-generate-password"><?php _e('Generate', 'woocommerce-1c-integration'); ?></button>
+                        <p style="margin-top: 5px;">
+                            <label for="wc1c_show_password_checkbox">
+                                <input type="checkbox" id="wc1c_show_password_checkbox" />
+                                <?php _e('Show password', 'woocommerce-1c-integration'); ?>
+                            </label>
+                        </p>
                     </td>
                 </tr>
             </table>
-
             <h3><?php _e('Logging', 'woocommerce-1c-integration'); ?></h3>
             <table class="form-table">
                 <tr>
